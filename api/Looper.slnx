@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Looper.Api.Tests/Looper.Api.Tests.csproj" />
+  <Project Path="Looper.Api/Looper.Api.csproj" />
+</Solution>

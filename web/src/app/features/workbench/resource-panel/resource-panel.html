@@ -1,0 +1,170 @@
+<div class="panel-header">
+  <h2>Resources</h2>
+  <button class="btn btn-primary btn-sm" (click)="openPicker()">+ New</button>
+</div>
+<p class="intro">Everything your agents can use — connections, folders, rules, gates.</p>
+
+@if (error(); as message) {
+  <p class="panel-error">{{ message }}</p>
+}
+
+@if (!store.loaded()) {
+  <p class="loading-note">Loading resources…</p>
+} @else if (store.failed()) {
+  <div class="empty-state">
+    <div class="glyph">📡</div>
+    <h3>Can’t reach the Looper API</h3>
+    <p>Start the API (<span class="mono">dotnet run</span> in <span class="mono">api/</span>) and try again.</p>
+    <button class="btn btn-soft btn-sm first-resource" (click)="store.load()">Retry</button>
+  </div>
+} @else if (groups().length === 0) {
+  <div class="empty-state">
+    <div class="glyph">🧰</div>
+    <h3>No resources yet</h3>
+    <p>Resources are the things your agents work with. Start with a folder, an MCP server, or a standing rule.</p>
+    <button class="btn btn-soft btn-sm first-resource" (click)="openPicker()">Create your first resource</button>
+  </div>
+} @else {
+  @for (group of groups(); track group.meta.typeKey) {
+    <section class="group">
+      <div class="section-label group-label">
+        <span class="group-icon">{{ group.meta.icon }}</span>
+        <span>{{ group.meta.label }}</span>
+      </div>
+      @for (resource of group.resources; track resource.id) {
+        <div class="card resource-card">
+          <span class="resource-icon">{{ group.meta.icon }}</span>
+          <div class="resource-body">
+            <div class="resource-title">
+              <span class="resource-name" [title]="resource.name">{{ resource.name }}</span>
+              @if (resource.agentCount > 0) {
+                <span class="chip chip-neutral"
+                  >{{ resource.agentCount }} agent{{ resource.agentCount === 1 ? '' : 's' }}</span
+                >
+              }
+            </div>
+            @if (resource.description) {
+              <p class="resource-desc" [title]="resource.description">{{ resource.description }}</p>
+            }
+          </div>
+          <div class="resource-actions">
+            <button class="icon-btn" title="Edit" (click)="edit(resource)">✏️</button>
+            <button class="icon-btn" title="Delete" (click)="remove(resource)">🗑️</button>
+          </div>
+        </div>
+      }
+    </section>
+  }
+}
+
+@if (pickerOpen()) {
+  <div class="modal-backdrop" (click)="closePicker()" (keydown.escape)="closePicker()">
+    <div class="modal picker-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>New resource</h2>
+        <button class="icon-btn" title="Close" (click)="closePicker()">✕</button>
+      </div>
+      <p class="picker-intro">What should your agents get access to?</p>
+      <div class="type-grid">
+        @for (t of store.types(); track t.typeKey) {
+          <button type="button" class="card interactive type-card" (click)="pickType(t)">
+            <span class="type-icon">{{ t.icon }}</span>
+            <span class="type-copy">
+              <span class="type-label">{{ t.label }}</span>
+              <span class="type-blurb">{{ t.blurb }}</span>
+            </span>
+            @if (!t.builtIn) {
+              <span
+                class="icon-btn type-remove"
+                role="button"
+                title="Remove this resource type"
+                (click)="removeType(t, $event)"
+                >✕</span
+              >
+            }
+          </button>
+        }
+        <button type="button" class="card interactive type-card ai-card" (click)="openAiCreate()">
+          <span class="type-icon">✨</span>
+          <span class="type-copy">
+            <span class="type-label">New type, written by Claude</span>
+            <span class="type-blurb">Describe a capability — Claude writes, compiles and installs the module live.</span>
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+@if (aiOpen()) {
+  <div class="modal-backdrop">
+    <div class="modal ai-modal">
+      <div class="modal-header">
+        <h2>✨ New resource type</h2>
+        <button class="icon-btn" title="Close" [disabled]="aiBusy()" (click)="closeAiCreate()">✕</button>
+      </div>
+
+      @if (aiResult(); as result) {
+        <div class="ai-success">
+          <p class="ai-success-line">
+            <span class="type-icon">{{ result.type.icon }}</span>
+            <strong>{{ result.type.label }}</strong> is installed and ready to use.
+          </p>
+          @if (result.costUsd > 0) {
+            <p class="hint">Generation cost: ${{ result.costUsd.toFixed(4) }}</p>
+          }
+          <details class="ai-source">
+            <summary>View the generated module source</summary>
+            <pre class="mono">{{ result.sourceCode }}</pre>
+          </details>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" (click)="closeAiCreate()">Done</button>
+          <button class="btn btn-primary" (click)="useGeneratedType()">Create a {{ result.type.label }}</button>
+        </div>
+      } @else {
+        <p class="picker-intro">
+          Describe the capability your agents need. Claude writes a C# module, Looper compiles it and
+          loads it as a new resource type — no restart needed.
+        </p>
+        <div class="field">
+          <label for="ai-description">What should it do?</label>
+          <textarea
+            id="ai-description"
+            class="textarea"
+            rows="4"
+            [disabled]="aiBusy()"
+            [(ngModel)]="aiDescription"
+            placeholder="e.g. A Postgres connection: host, database, user and password. Expose it as PG* environment variables and tell the agent it can use psql."
+          ></textarea>
+          <span class="hint">Secrets you describe become password fields and are masked automatically.</span>
+        </div>
+        @if (aiError(); as message) {
+          <p class="panel-error ai-error">{{ message }}</p>
+        }
+        <div class="modal-footer">
+          <button class="btn btn-ghost" [disabled]="aiBusy()" (click)="closeAiCreate()">Cancel</button>
+          <button class="btn btn-primary" [disabled]="aiBusy() || aiDescription().trim().length < 10" (click)="generateType()">
+            @if (aiBusy()) {
+              <span class="pulse-dot"></span> Claude is writing the module…
+            } @else {
+              Generate type
+            }
+          </button>
+        </div>
+        @if (aiBusy()) {
+          <p class="hint ai-wait">This usually takes one to two minutes — the module is generated, compiled and verified.</p>
+        }
+      }
+    </div>
+  </div>
+}
+
+@if (editorType(); as type) {
+  <app-resource-editor
+    [type]="type"
+    [typeDef]="editorTypeDef()"
+    [resource]="editing()"
+    (closed)="onEditorClosed($event)"
+  />
+}

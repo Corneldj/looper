@@ -1,0 +1,88 @@
+.editor-title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.editor-icon {
+  font-size: 19px;
+  flex: none;
+}
+
+.editor-blurb {
+  color: var(--text-3);
+  font-size: 12.5px;
+  margin-top: -10px;
+}
+
+.editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.optional {
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+/* FileLocation "use as working directory" switch */
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.switch-text {
+  display: flex;
+  flex-direction: column;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.switch-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+/* TestingAction timeout stays narrow next to the cwd input */
+
+.timeout-field {
+  flex: 0 0 132px;
+}
+
+.save-error {
+  font-size: 12.5px;
+  color: var(--red);
+  background: var(--red-soft);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+}
+
+/* Dynamic (Custom) type fields */
+.req { color: var(--red); }
+
+.custom-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+/* Path field with its folder-browse button */
+.path-with-browse {
+  display: flex;
+  gap: 8px;
+
+  .input { flex: 1; min-width: 0; }
+  .btn { flex: none; }
+}

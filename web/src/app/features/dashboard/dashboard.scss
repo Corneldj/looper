@@ -1,0 +1,252 @@
+/* Layout & composition only — visuals come from the shared design system. */
+
+section {
+  transition: opacity 0.15s ease;
+}
+
+.dim {
+  opacity: 0.55;
+}
+
+/* ---------- period selector ---------- */
+
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+
+  button {
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-2);
+    background: transparent;
+    border: none;
+    border-radius: 7px;
+    padding: 5px 14px;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+    font-variant-numeric: tabular-nums;
+
+    &:hover {
+      color: var(--text);
+    }
+
+    &.active {
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+    }
+  }
+}
+
+/* ---------- stale-data note ---------- */
+
+.stale-note {
+  margin: -8px 0 20px;
+  padding: 9px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--amber);
+  background: var(--amber-soft);
+  border-radius: var(--radius-sm);
+}
+
+/* ---------- KPI tiles ---------- */
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 1100px) {
+  .kpis {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 20px 22px;
+}
+
+.kpi-value {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+
+  &.good { color: var(--green); }
+  &.warn { color: var(--amber); }
+  &.bad { color: var(--red); }
+}
+
+.kpi-delta {
+  min-height: 18px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.trend {
+  font-weight: 700;
+
+  &.bad { color: var(--red); }
+  &.good { color: var(--green); }
+  &.accent { color: var(--accent-strong); }
+  &.flat { color: var(--text-3); font-weight: 600; }
+}
+
+.vs {
+  color: var(--text-3);
+}
+
+/* ---------- card blocks ---------- */
+
+.block {
+  margin-bottom: 20px;
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+
+  h3 {
+    font-size: 15.5px;
+  }
+}
+
+.card-hint {
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 940px) {
+  .two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.loading-hint {
+  padding: 36px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+/* ---------- recent failures ---------- */
+
+.failure-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.failure-row {
+  display: grid;
+  grid-template-columns: auto minmax(110px, 200px) 84px 1fr;
+  align-items: center;
+  gap: 16px;
+  padding: 11px 4px;
+  border-bottom: 1px solid var(--border);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.agent-link {
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--accent);
+  }
+}
+
+.when {
+  font-size: 12.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.err {
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.empty-state.success {
+  background: var(--green-soft);
+  border-radius: var(--radius-sm);
+  color: var(--green);
+
+  h3 {
+    color: var(--green);
+  }
+
+  p {
+    color: var(--green);
+    opacity: 0.75;
+  }
+}
+
+/* ---------- breakdown table ---------- */
+
+table.data {
+  th.r,
+  td.r {
+    text-align: right;
+  }
+}
+
+.muted {
+  color: var(--text-3);
+}
+
+.strong {
+  font-weight: 700;
+}
+
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 7px;
+
+  &.good { background: var(--green); }
+  &.warn { background: var(--amber); }
+  &.bad { background: var(--red); }
+}
+
+.off-chip {
+  margin-left: 8px;
+  font-size: 10.5px;
+  padding: 1px 8px;
+}

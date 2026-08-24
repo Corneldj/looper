@@ -1,0 +1,16 @@
+# .NET
+api/**/bin/
+api/**/obj/
+*.user
+looper.db*
+
+# Angular / Node
+web/node_modules/
+web/dist/
+web/.angular/
+npm-debug.log*
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store

@@ -1,0 +1,114 @@
+.setup-modal {
+  max-width: 600px;
+  gap: 16px;
+}
+
+.setup-intro {
+  color: var(--text-2);
+  line-height: 1.6;
+}
+
+.setup-ok {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  background: var(--green-soft);
+  border-radius: var(--radius-sm);
+
+  p { color: var(--text-2); }
+}
+
+.probe-error {
+  font-size: 12px;
+  color: var(--red);
+  background: var(--red-soft);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  overflow-wrap: anywhere;
+}
+
+.setup-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+
+  h3 { font-size: 14.5px; margin-bottom: 2px; }
+  .btn { flex: none; }
+}
+
+.installing-note { text-align: center; }
+
+.install-output {
+  summary { cursor: pointer; font-size: 13px; color: var(--text-2); }
+
+  pre {
+    margin: 8px 0 0;
+    padding: 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 11.5px;
+    line-height: 1.5;
+    max-height: 220px;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+}
+
+.command-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  code {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .btn { flex: none; width: 84px; }
+}
+
+.setup-notes {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-2);
+
+  .mono { font-size: 11.5px; }
+}

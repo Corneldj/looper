@@ -1,0 +1,46 @@
+@if (!hasData()) {
+  <div class="empty-state">
+    <div class="glyph">{{ emptyGlyph() }}</div>
+    <h3>{{ emptyTitle() }}</h3>
+    <p>{{ emptyText() }}</p>
+  </div>
+} @else {
+  <div class="rows" (pointerleave)="clear()">
+    @for (row of rows(); track $index; let i = $index) {
+      <div
+        class="row"
+        tabindex="0"
+        [attr.aria-label]="ariaFor(row)"
+        (pointermove)="onMove($event, i)"
+        (focus)="onFocus($event, i)"
+        (blur)="clear()"
+      >
+        <span class="label" [title]="row.label">{{ row.label }}</span>
+        <span class="track">
+          <span
+            class="fill"
+            [class.lift]="hovered() === i"
+            [style.width.%]="widthPct(row.value)"
+            [style.min-width.px]="row.value > 0 ? 2 : 0"
+            [style.background]="row.color"
+          ></span>
+        </span>
+        <span class="value num">{{ row.display }}</span>
+      </div>
+    }
+  </div>
+
+  @if (tip(); as t) {
+    <div class="viz-tip" [style.left.px]="t.x" [style.top.px]="t.y">
+      <div class="tip-head">
+        <span class="swatch" [style.background]="t.row.color"></span>{{ t.row.label }}
+      </div>
+      @for (d of t.row.detail; track d.label) {
+        <div class="tip-row" [class.alert]="d.alert">
+          <span class="k">{{ d.label }}</span>
+          <span class="v num">{{ d.value }}</span>
+        </div>
+      }
+    </div>
+  }
+}

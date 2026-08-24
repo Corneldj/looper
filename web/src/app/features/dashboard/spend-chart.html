@@ -1,0 +1,66 @@
+@if (!hasData()) {
+  <div class="empty-state">
+    <div class="glyph">💤</div>
+    <h3>No spend in this period</h3>
+    <p>Once your agents run, daily cost shows up here.</p>
+  </div>
+} @else {
+  @if (layout(); as l) {
+    <div class="frame" (pointerleave)="hovered.set(null)">
+      <svg
+        [attr.width]="l.width"
+        [attr.height]="TOTAL_H"
+        role="group"
+        aria-label="Daily spend bar chart"
+      >
+        <!-- recessive y-gridlines + $ ticks -->
+        @for (t of l.ticks; track t.label) {
+          <line class="grid" [attr.x1]="PAD_LEFT" [attr.x2]="l.width - PAD_RIGHT" [attr.y1]="t.y" [attr.y2]="t.y" />
+          <text class="tick" [attr.x]="PAD_LEFT - 8" [attr.y]="t.y + 3.5" text-anchor="end">{{ t.label }}</text>
+        }
+        <line class="baseline" [attr.x1]="PAD_LEFT" [attr.x2]="l.width - PAD_RIGHT" [attr.y1]="l.baselineY" [attr.y2]="l.baselineY" />
+
+        <!-- bars: single brand-indigo series, rounded data-end only -->
+        @for (b of l.bars; track $index; let i = $index) {
+          @if (b.path) {
+            <path class="bar" [class.lift]="hovered() === i" [attr.d]="b.path" />
+          }
+        }
+
+        <!-- sparse x labels -->
+        @for (xl of l.xLabels; track xl.i) {
+          <text class="tick" [attr.x]="xl.x" [attr.y]="l.baselineY + 17" text-anchor="middle">{{ xl.text }}</text>
+        }
+
+        <!-- full-column hit targets -->
+        @for (s of l.slots; track s.i) {
+          <rect
+            class="hit"
+            [attr.x]="s.x"
+            [attr.y]="PAD_TOP"
+            [attr.width]="s.w"
+            [attr.height]="PLOT_H"
+            tabindex="0"
+            role="img"
+            [attr.aria-label]="s.aria"
+            (pointerenter)="hovered.set(s.i)"
+            (focus)="hovered.set(s.i)"
+            (blur)="hovered.set(null)"
+          />
+        }
+      </svg>
+
+      @if (tip(); as t) {
+        <div class="viz-tip" [style.left.px]="t.left" [style.top.px]="t.top">
+          <div class="tip-date">{{ t.date }}</div>
+          <div class="tip-row"><span class="k">Cost</span><span class="v num">{{ t.cost }}</span></div>
+          <div class="tip-row"><span class="k">Runs</span><span class="v num">{{ t.runs }}</span></div>
+          <div class="tip-row" [class.alert]="t.failures > 0">
+            <span class="k">Failures</span><span class="v num">{{ t.failures }}</span>
+          </div>
+        </div>
+      }
+    </div>
+    <p class="visually-hidden">{{ summaryText() }}</p>
+  }
+}

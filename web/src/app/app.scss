@@ -1,0 +1,82 @@
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--topbar-bg);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar-inner {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 44px;
+  height: 62px;
+  display: flex;
+  align-items: center;
+  gap: 40px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-weight: 800;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+  color: #fff;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.nav {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+
+  a {
+    padding: 7px 14px;
+    border-radius: 999px;
+    color: var(--text-2);
+    font-weight: 600;
+    font-size: 13.5px;
+    transition: background 0.12s ease, color 0.12s ease;
+
+    &:hover { color: var(--text); background: var(--surface-2); }
+    &.active { color: var(--accent-strong); background: var(--accent-soft); }
+  }
+}
+
+.topbar-status { display: flex; align-items: center; }
+
+/* Claude Code missing — slim setup banner under the topbar */
+.claude-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 9px 44px;
+  background: var(--amber-soft);
+  border-bottom: 1px solid #f2e2bd;
+  font-size: 13px;
+  color: var(--amber);
+
+  strong { font-weight: 700; }
+}
+
+.banner-btn {
+  background: var(--amber);
+  color: #fff;
+
+  &:not(:disabled):hover { background: #9a6812; }
+}

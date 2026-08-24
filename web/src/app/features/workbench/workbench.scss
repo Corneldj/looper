@@ -1,0 +1,24 @@
+.workbench {
+  display: grid;
+  grid-template-columns: 390px 1fr;
+  gap: 32px;
+  align-items: start;
+}
+
+.resources-column {
+  position: sticky;
+  top: 86px;
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+  padding-right: 4px;
+  /* Sticky creates a stacking context that would trap this panel's modals below
+     later-DOM positioned elements (e.g. agent-card toggles). Sitting above the
+     topbar (40) lets the modals inside dim the whole page; the column itself
+     never geometrically overlaps the topbar. */
+  z-index: 41;
+}
+
+@media (max-width: 1080px) {
+  .workbench { grid-template-columns: 1fr; }
+  .resources-column { position: static; max-height: none; }
+}

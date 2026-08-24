@@ -1,0 +1,124 @@
+.picker-modal {
+  max-width: 640px;
+  gap: 14px;
+}
+
+.path-row {
+  display: flex;
+  gap: 8px;
+
+  .input { flex: 1; min-width: 0; }
+}
+
+.quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.quick-link {
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11.5px;
+
+  &:hover { background: var(--accent-soft); color: var(--accent-strong); }
+}
+
+.breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  font-size: 12.5px;
+}
+
+.crumb {
+  border: none;
+  background: transparent;
+  padding: 3px 6px;
+  border-radius: 6px;
+  font: inherit;
+  font-family: var(--mono);
+  color: var(--text-2);
+  cursor: pointer;
+
+  &:hover { background: var(--surface-2); color: var(--text); }
+  &.current { color: var(--text); font-weight: 600; }
+}
+
+.crumb-sep { color: var(--text-3); }
+
+.listing {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  min-height: 280px;
+  max-height: 44vh;
+  overflow-y: auto;
+  padding: 6px;
+  transition: opacity 0.12s ease;
+
+  &.busy { opacity: 0.5; }
+}
+
+.dir-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+
+  &:hover { background: var(--surface); }
+  &.up { color: var(--text-2); }
+  &.hidden-dir .dir-name { color: var(--text-2); }
+}
+
+.dir-icon { flex: none; font-size: 14px; }
+
+.dir-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.no-subfolders,
+.listing-error {
+  padding: 18px 12px;
+  font-size: 13px;
+  color: var(--text-3);
+  text-align: center;
+}
+
+.listing-error { color: var(--red); }
+
+.picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.hidden-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.picker-actions {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}

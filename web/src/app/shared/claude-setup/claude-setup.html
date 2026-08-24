@@ -1,0 +1,87 @@
+<div class="modal-backdrop">
+  <div class="modal setup-modal">
+    <div class="modal-header">
+      <h2>Set up Claude Code</h2>
+      <button class="icon-btn" title="Close" [disabled]="store.installing()" (click)="close()">✕</button>
+    </div>
+
+    @if (store.status()?.available) {
+      <div class="setup-ok">
+        <span class="chip chip-green">Connected</span>
+        <p>
+          <strong>Claude Code is ready</strong> — {{ store.status()?.version || 'version detected' }}.
+          Your agents can run live loops now.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" (click)="close()">Done</button>
+      </div>
+    } @else {
+      <p class="setup-intro">
+        Looper drives real agent runs through the <strong>Claude Code CLI</strong> (the Claude Agent
+        SDK harness). It isn’t available on this machine yet — dry runs still work, but live loops
+        will fail until it’s installed.
+      </p>
+
+      @if (store.status()?.error; as probeError) {
+        <p class="probe-error mono">{{ probeError }}</p>
+      }
+
+      <div class="setup-option">
+        <div class="option-copy">
+          <h3>Install it for me</h3>
+          <p class="hint">Runs the official installer (<span class="mono">claude.ai/install.sh</span>) on this machine.</p>
+        </div>
+        <button class="btn btn-primary" [disabled]="store.installing()" (click)="store.install()">
+          @if (store.installing()) {
+            <span class="pulse-dot"></span> Installing…
+          } @else {
+            Install Claude Code
+          }
+        </button>
+      </div>
+
+      @if (store.installing()) {
+        <p class="hint installing-note">This usually takes a minute — the installer downloads the CLI and puts it on your PATH.</p>
+      }
+
+      @if (store.installError(); as message) {
+        <p class="probe-error">{{ message }}</p>
+      }
+      @if (store.installOutput(); as installerOutput) {
+        <details class="install-output" open>
+          <summary>Installer output</summary>
+          <pre class="mono">{{ installerOutput }}</pre>
+        </details>
+      }
+
+      <div class="divider"><span>or install it yourself</span></div>
+
+      <div class="command-row">
+        <code class="mono">{{ curlCommand }}</code>
+        <button class="btn btn-ghost btn-sm" (click)="copy(curlCommand)">
+          {{ copiedCommand() === curlCommand ? 'Copied ✓' : 'Copy' }}
+        </button>
+      </div>
+      <div class="command-row">
+        <code class="mono">{{ npmCommand }}</code>
+        <button class="btn btn-ghost btn-sm" (click)="copy(npmCommand)">
+          {{ copiedCommand() === npmCommand ? 'Copied ✓' : 'Copy' }}
+        </button>
+      </div>
+
+      <ul class="setup-notes">
+        <li>After installing, run <span class="mono">claude</span> once in a terminal to sign in — headless loops reuse those credentials.</li>
+        <li>Installed somewhere unusual? Point <span class="mono">Looper:ClaudeCommand</span> at it in <span class="mono">api/Looper.Api/appsettings.json</span>.</li>
+        <li><a href="https://code.claude.com/docs" target="_blank" rel="noopener">Claude Code documentation ↗</a></li>
+      </ul>
+
+      <div class="modal-footer">
+        <button class="btn btn-ghost" [disabled]="store.checking() || store.installing()" (click)="store.check(true)">
+          {{ store.checking() ? 'Checking…' : 'Check again' }}
+        </button>
+        <button class="btn btn-ghost" [disabled]="store.installing()" (click)="close()">Close</button>
+      </div>
+    }
+  </div>
+</div>

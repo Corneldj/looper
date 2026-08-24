@@ -1,0 +1,195 @@
+.agent-editor-modal {
+  max-width: 720px;
+  gap: 24px;
+}
+
+.modal-header {
+  align-items: flex-start;
+
+  .modal-subtitle {
+    color: var(--text-2);
+    font-size: 13px;
+    margin-top: 4px;
+    max-width: 52ch;
+  }
+}
+
+.editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.prompt-area {
+  min-height: 140px;
+}
+
+.interval-presets {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+
+  .btn.active {
+    background: var(--accent-soft);
+    border-color: transparent;
+    color: var(--accent-strong);
+  }
+}
+
+.switch-rows {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.switch-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+
+  .switch {
+    margin-top: 2px;
+  }
+}
+
+.switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+
+  .switch-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .hint {
+    font-size: 12px;
+    color: var(--text-3);
+  }
+}
+
+/* ---------- Resources ---------- */
+
+.resources-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.resources-note {
+  font-size: 13px;
+  color: var(--text-3);
+
+  &.link-text {
+    color: var(--accent);
+  }
+}
+
+.resource-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 6px;
+
+  .group-icon {
+    font-size: 13px;
+  }
+}
+
+.resource-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+
+  &:hover {
+    background: var(--surface);
+  }
+
+  &.selected {
+    background: var(--accent-soft);
+  }
+
+  input[type='checkbox'] {
+    accent-color: var(--accent);
+    margin-top: 3px;
+    flex: none;
+  }
+
+  .resource-icon {
+    font-size: 15px;
+    line-height: 1.3;
+    flex: none;
+  }
+}
+
+.resource-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.resource-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.resource-desc {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* ---------- Footer ---------- */
+
+.modal-footer {
+  align-items: center;
+
+  .save-error {
+    flex: 1;
+    text-align: left;
+    font-size: 12.5px;
+    color: var(--red);
+  }
+}
+
+@media (max-width: 620px) {
+  .form-row {
+    flex-direction: column;
+  }
+}
+
+/* Working-directory field with its folder-browse button */
+.path-with-browse {
+  display: flex;
+  gap: 8px;
+
+  .input { flex: 1; min-width: 0; }
+  .btn { flex: none; }
+}

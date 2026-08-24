@@ -1,0 +1,40 @@
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" routerLink="/workbench">
+      <span class="brand-mark">∞</span>
+      <span class="brand-name">Looper</span>
+    </a>
+
+    <nav class="nav">
+      <a routerLink="/workbench" routerLinkActive="active">Workbench</a>
+      <a routerLink="/dashboard" routerLinkActive="active">Dashboard</a>
+    </nav>
+
+    <div class="topbar-status">
+      @if (!agentsStore.apiOnline()) {
+        <span class="chip chip-red">API offline</span>
+      } @else if (agentsStore.runningCount() > 0) {
+        <span class="chip chip-green"><span class="pulse-dot"></span>{{ agentsStore.runningCount() }} running</span>
+      } @else {
+        <span class="chip chip-neutral">{{ agentsStore.enabledCount() }} agents live</span>
+      }
+    </div>
+  </div>
+</header>
+
+@if (claudeStore.missing() && agentsStore.apiOnline()) {
+  <div class="claude-banner">
+    <span class="banner-text">
+      <strong>Claude Code isn’t installed</strong> — agents can only dry-run until it is.
+    </span>
+    <button class="btn btn-sm banner-btn" (click)="setupOpen.set(true)">Set up Claude Code</button>
+  </div>
+}
+
+<main>
+  <router-outlet />
+</main>
+
+@if (setupOpen()) {
+  <app-claude-setup (closed)="setupOpen.set(false)" />
+}

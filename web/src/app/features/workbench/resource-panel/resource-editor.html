@@ -1,0 +1,301 @@
+<!-- Deliberately no backdrop-click close: a stray click must not discard typed input. -->
+<div class="modal-backdrop" (keydown.escape)="cancel()">
+  <div class="modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <div class="editor-title">
+        <span class="editor-icon">{{ meta().icon }}</span>
+        <h2>{{ resource() ? 'Edit' : 'New' }} {{ meta().label }}</h2>
+      </div>
+      <button class="icon-btn" title="Close" (click)="cancel()">✕</button>
+    </div>
+    <p class="editor-blurb">{{ meta().blurb }}</p>
+
+    <div class="editor-form">
+      <div class="field">
+        <label>Name</label>
+        <input class="input" [(ngModel)]="name" placeholder="A short, recognisable name" />
+      </div>
+      <div class="field">
+        <label>Description</label>
+        <input class="input" [(ngModel)]="description" placeholder="Optional — what is this for?" />
+      </div>
+
+      @switch (type()) {
+        @case ('McpServer') {
+          <div class="field">
+            <label>Transport</label>
+            <select class="select" [(ngModel)]="transport">
+              <option value="stdio">stdio — local command</option>
+              <option value="http">http — streamable HTTP</option>
+              <option value="sse">sse — server-sent events</option>
+            </select>
+          </div>
+          @if (transport() === 'stdio') {
+            <div class="field">
+              <label>Command</label>
+              <input class="input mono" [(ngModel)]="command" placeholder="npx" />
+            </div>
+            <div class="field">
+              <label>Arguments</label>
+              <textarea
+                class="textarea mono"
+                [(ngModel)]="argsText"
+                placeholder="-y&#10;@modelcontextprotocol/server-filesystem"
+              ></textarea>
+              <span class="hint">One argument per line.</span>
+            </div>
+            <div class="field">
+              <label>Environment variables</label>
+              <textarea class="textarea mono" [(ngModel)]="envText" placeholder="API_KEY=…"></textarea>
+              <span class="hint">One KEY=value per line.</span>
+            </div>
+          } @else {
+            <div class="field">
+              <label>URL</label>
+              <input class="input mono" [(ngModel)]="url" placeholder="https://host/mcp" />
+            </div>
+          }
+        }
+
+        @case ('FileLocation') {
+          <div class="field">
+            <label>Path</label>
+            <div class="path-with-browse">
+              <input class="input mono" [(ngModel)]="path" placeholder="/home/you/projects/my-app" />
+              <button type="button" class="btn btn-ghost" (click)="openFolderPicker()">Browse…</button>
+            </div>
+          </div>
+          <label class="switch-row">
+            <span class="switch">
+              <input type="checkbox" [(ngModel)]="primary" />
+              <span class="track"></span>
+            </span>
+            <span class="switch-text">
+              Use as working directory
+              <span class="switch-hint">The agent starts its loop here.</span>
+            </span>
+          </label>
+        }
+
+        @case ('Rag') {
+          <div class="field">
+            <label>Instructions</label>
+            <textarea
+              class="textarea"
+              [(ngModel)]="instructions"
+              placeholder="When and how should the agent consult this knowledge?"
+            ></textarea>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label>Path <span class="optional">optional</span></label>
+              <input class="input mono" [(ngModel)]="ragPath" placeholder="/docs/handbook" />
+            </div>
+            <div class="field">
+              <label>URL <span class="optional">optional</span></label>
+              <input class="input mono" [(ngModel)]="ragUrl" placeholder="https://…" />
+            </div>
+          </div>
+        }
+
+        @case ('TestingAction') {
+          <div class="field">
+            <label>Command</label>
+            <input class="input mono" [(ngModel)]="testCommand" placeholder="npm test" />
+            <span class="hint">Runs after every loop. Non-zero exit fails the gate.</span>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label>Working directory <span class="optional">optional</span></label>
+              <input class="input mono" [(ngModel)]="workingDirectory" placeholder="/home/you/projects/my-app" />
+            </div>
+            <div class="field timeout-field">
+              <label>Timeout (s) <span class="optional">optional</span></label>
+              <input class="input num" type="number" min="1" [(ngModel)]="timeoutSeconds" placeholder="300" />
+            </div>
+          </div>
+        }
+
+        @case ('Rule') {
+          <div class="field">
+            <label>Rule</label>
+            <textarea
+              class="textarea"
+              [(ngModel)]="ruleText"
+              placeholder="Always write tests before committing. Never push directly to main."
+            ></textarea>
+            <span class="hint">Appended to the agent’s system prompt.</span>
+          </div>
+        }
+
+        @case ('SubAgent') {
+          <div class="field">
+            <label>What it does</label>
+            <input class="input" [(ngModel)]="subDescription" placeholder="Reviews diffs for security issues" />
+            <span class="hint">Shown to the main agent so it knows when to delegate.</span>
+          </div>
+          <div class="field">
+            <label>Prompt</label>
+            <textarea
+              class="textarea"
+              [(ngModel)]="subPrompt"
+              placeholder="You are a meticulous security reviewer…"
+            ></textarea>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label>Tools <span class="optional">optional</span></label>
+              <input class="input mono" [(ngModel)]="subTools" placeholder="Read, Grep, Bash" />
+              <span class="hint">Comma-separated list.</span>
+            </div>
+            <div class="field">
+              <label>Model <span class="optional">optional</span></label>
+              <select class="select" [(ngModel)]="subModel">
+                <option value="">Same as the agent</option>
+                @for (m of models; track m.id) {
+                  <option [value]="m.id">{{ m.label }}</option>
+                }
+              </select>
+            </div>
+          </div>
+        }
+
+        @case ('AzureConnection') {
+          <div class="form-row">
+            <div class="field">
+              <label>Tenant ID</label>
+              <input class="input mono" [(ngModel)]="tenantId" placeholder="00000000-…" />
+            </div>
+            <div class="field">
+              <label>Subscription ID</label>
+              <input class="input mono" [(ngModel)]="subscriptionId" placeholder="00000000-…" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label>Client ID</label>
+              <input class="input mono" [(ngModel)]="clientId" placeholder="00000000-…" />
+            </div>
+            <div class="field">
+              <label>Client secret</label>
+              <input class="input" type="password" autocomplete="new-password" [(ngModel)]="clientSecret" />
+              @if (clientSecretUnchanged()) {
+                <span class="hint">Leave unchanged to keep the stored value.</span>
+              }
+            </div>
+          </div>
+        }
+
+        @case ('PatToken') {
+          <div class="field">
+            <label>Environment variable</label>
+            <input class="input mono" [(ngModel)]="envVar" placeholder="AZURE_DEVOPS_PAT" />
+            <span class="hint">The token is injected under this name.</span>
+          </div>
+          <div class="field">
+            <label>Token</label>
+            <input class="input" type="password" autocomplete="new-password" [(ngModel)]="tokenValue" />
+            @if (tokenValueUnchanged()) {
+              <span class="hint">Leave unchanged to keep the stored value.</span>
+            }
+          </div>
+        }
+
+        @case ('Custom') {
+          @for (field of customFields(); track field.key) {
+            <div class="field">
+              @switch (field.kind) {
+                @case ('Boolean') {
+                  <label class="custom-switch-row">
+                    <span class="switch">
+                      <input
+                        type="checkbox"
+                        [checked]="customValues()[field.key] === true"
+                        (change)="setCustomValue(field.key, $any($event.target).checked)"
+                      />
+                      <span class="track"></span>
+                    </span>
+                    <span>{{ field.label }}</span>
+                  </label>
+                }
+                @case ('Multiline') {
+                  <label>{{ field.label }}@if (field.required) {<span class="req"> *</span>}</label>
+                  <textarea
+                    class="textarea"
+                    rows="4"
+                    [placeholder]="field.placeholder ?? ''"
+                    [ngModel]="asText(customValues()[field.key])"
+                    (ngModelChange)="setCustomValue(field.key, $event)"
+                  ></textarea>
+                }
+                @case ('Number') {
+                  <label>{{ field.label }}@if (field.required) {<span class="req"> *</span>}</label>
+                  <input
+                    class="input"
+                    type="number"
+                    [placeholder]="field.placeholder ?? ''"
+                    [ngModel]="customValues()[field.key]"
+                    (ngModelChange)="setCustomValue(field.key, $event)"
+                  />
+                }
+                @case ('Password') {
+                  <label>{{ field.label }}@if (field.required) {<span class="req"> *</span>}</label>
+                  <input
+                    class="input"
+                    type="password"
+                    autocomplete="new-password"
+                    [ngModel]="asText(customValues()[field.key])"
+                    (ngModelChange)="setCustomValue(field.key, $event)"
+                  />
+                  @if (asText(customValues()[field.key]) === secretSentinel) {
+                    <span class="hint">Leave unchanged to keep the stored value.</span>
+                  }
+                }
+                @case ('Select') {
+                  <label>{{ field.label }}@if (field.required) {<span class="req"> *</span>}</label>
+                  <select
+                    class="select"
+                    [ngModel]="asText(customValues()[field.key])"
+                    (ngModelChange)="setCustomValue(field.key, $event)"
+                  >
+                    <option value=""></option>
+                    @for (option of field.options ?? []; track option) {
+                      <option [value]="option">{{ option }}</option>
+                    }
+                  </select>
+                }
+                @default {
+                  <label>{{ field.label }}@if (field.required) {<span class="req"> *</span>}</label>
+                  <input
+                    class="input"
+                    [placeholder]="field.placeholder ?? ''"
+                    [ngModel]="asText(customValues()[field.key])"
+                    (ngModelChange)="setCustomValue(field.key, $event)"
+                  />
+                }
+              }
+              @if (field.hint && field.kind !== 'Password') {
+                <span class="hint">{{ field.hint }}</span>
+              }
+            </div>
+          }
+        }
+      }
+    </div>
+
+    @if (saveError(); as message) {
+      <p class="save-error">{{ message }}</p>
+    }
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" (click)="cancel()">Cancel</button>
+      <button class="btn btn-primary" [disabled]="!canSave() || saving()" (click)="save()">
+        {{ saving() ? 'Saving…' : resource() ? 'Save changes' : 'Create resource' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+@if (folderPickerOpen()) {
+  <app-folder-picker [startPath]="path() || null" (picked)="onFolderPicked($event)" />
+}

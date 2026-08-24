@@ -1,0 +1,251 @@
+<div class="page agent-detail">
+  <a class="back-link" routerLink="/workbench">← Workbench</a>
+
+  @if (notFound()) {
+    <div class="card">
+      <div class="empty-state">
+        <div class="glyph">∅</div>
+        <h3>Agent not found</h3>
+        <p>It may have been deleted. <a routerLink="/workbench">Back to the Workbench</a>.</p>
+      </div>
+    </div>
+  } @else if (agent(); as a) {
+    <header class="page-header">
+      <div class="header-main">
+        <div class="title-row">
+          <h1>{{ a.name }}</h1>
+          @if (a.isRunning) {
+            <span class="chip chip-green"><span class="pulse-dot"></span>Running</span>
+          } @else if (a.enabled) {
+            <span class="chip chip-accent">Scheduled</span>
+          } @else {
+            <span class="chip chip-neutral">Paused</span>
+          }
+          @if (a.dryRun) {
+            <span class="chip chip-amber">Dry run</span>
+          }
+        </div>
+        @if (a.description) {
+          <p class="subtitle">{{ a.description }}</p>
+        }
+      </div>
+
+      <div class="header-actions">
+        @if (a.isRunning) {
+          <button type="button" class="btn btn-danger" [disabled]="actionBusy()" (click)="cancelRun()">
+            Cancel run
+          </button>
+        }
+        <button type="button" class="btn btn-primary" [disabled]="a.isRunning || actionBusy()" (click)="runNow()">
+          Run now
+        </button>
+      </div>
+    </header>
+
+    <div class="meta-strip">
+      <div class="card meta-card">
+        <span class="section-label">Model</span>
+        <span class="meta-value">{{ modelShortName(a.model) }}</span>
+      </div>
+      <div class="card meta-card">
+        <span class="section-label">Effort</span>
+        <span class="meta-value">{{ effortLabel(a.effort) }}</span>
+      </div>
+      <div class="card meta-card">
+        <span class="section-label">Cadence</span>
+        <span class="meta-value">{{ formatInterval(a.intervalMinutes) }}</span>
+      </div>
+      <div class="card meta-card">
+        <span class="section-label">Last run</span>
+        <span class="meta-value">{{ relativeTime(a.lastRunAtUtc) }}</span>
+      </div>
+      <div class="card meta-card">
+        <span class="section-label">Next run</span>
+        <span class="meta-value">{{ a.enabled ? relativeTime(a.nextRunAtUtc) : '—' }}</span>
+      </div>
+    </div>
+
+    <section class="card runs-card">
+      <div class="runs-head">
+        <h2>Run history</h2>
+        @if (runs().length > 0) {
+          <span class="chip chip-neutral">{{ runs().length }}</span>
+        }
+      </div>
+
+      @if (runs().length === 0) {
+        <div class="empty-state">
+          <div class="glyph">∞</div>
+          <h3>No iterations yet</h3>
+          <p>Enable the loop or hit Run now to start the first one.</p>
+        </div>
+      } @else {
+        <div class="table-wrap">
+          <table class="data">
+            <thead>
+              <tr>
+                <th>Started</th>
+                <th>Trigger</th>
+                <th>Status</th>
+                <th>Duration</th>
+                <th>Turns</th>
+                <th>Tokens</th>
+                <th>Cost</th>
+                <th>Tests</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (run of runs(); track run.id) {
+                <tr class="clickable" [class.selected]="run.id === selectedRunId()" (click)="selectRun(run)">
+                  <td>{{ formatDateTime(run.startedAtUtc) }}</td>
+                  <td class="dim">{{ run.trigger }}</td>
+                  <td>
+                    <span [class]="'chip ' + runChipClass(run.status)">
+                      @if (run.status === 'Running') {
+                        <span class="pulse-dot"></span>
+                      }
+                      {{ runStatusLabel(run.status) }}
+                    </span>
+                  </td>
+                  <td class="num">{{ run.status === 'Running' ? '…' : formatDuration(run.durationMs) }}</td>
+                  <td class="num">{{ run.numTurns }}</td>
+                  <td class="num">{{ formatTokens(run.inputTokens + run.outputTokens) }}</td>
+                  <td class="num">{{ formatCost(run.costUsd) }}</td>
+                  <td>
+                    @if (run.testsPassed === true) {
+                      <span class="test-pass">✓</span>
+                    } @else if (run.testsPassed === false) {
+                      <span class="test-fail">✗</span>
+                    } @else {
+                      <span class="dim">—</span>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  } @else if (loaded()) {
+    <div class="card">
+      <div class="empty-state">
+        <div class="glyph">⌁</div>
+        <h3>Can't reach the API</h3>
+        <p>Looper will keep retrying in the background. <a routerLink="/workbench">Back to the Workbench</a>.</p>
+      </div>
+    </div>
+  } @else {
+    <div class="loading dim">Loading agent…</div>
+  }
+
+  @if (selectedRunId()) {
+    <aside class="run-drawer" role="dialog" aria-label="Run detail">
+      <header class="drawer-header">
+        <h3>Run detail</h3>
+        @if (runDetail(); as run) {
+          <span [class]="'chip ' + runChipClass(run.status)">
+            @if (run.status === 'Running') {
+              <span class="pulse-dot"></span>
+            }
+            {{ runStatusLabel(run.status) }}
+          </span>
+        }
+        <span class="spacer"></span>
+        <button type="button" class="icon-btn" aria-label="Close" (click)="closeDrawer()">✕</button>
+      </header>
+
+      <div class="drawer-body">
+        @if (runDetail(); as run) {
+          <div class="drawer-times">
+            <span><span class="dim">Started</span> {{ formatDateTime(run.startedAtUtc) }}</span>
+            <span><span class="dim">Completed</span> {{ formatDateTime(run.completedAtUtc) }}</span>
+          </div>
+
+          <div class="metrics-grid">
+            <div class="metric">
+              <span class="metric-label">Cost</span>
+              <span class="metric-value num">{{ formatCost(run.costUsd) }}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Duration</span>
+              <span class="metric-value num">{{ run.status === 'Running' ? '…' : formatDuration(run.durationMs) }}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Turns</span>
+              <span class="metric-value num">{{ run.numTurns }}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Input tokens</span>
+              <span class="metric-value num">{{ formatTokens(run.inputTokens) }}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Output tokens</span>
+              <span class="metric-value num">{{ formatTokens(run.outputTokens) }}</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Cache read</span>
+              <span class="metric-value num">{{ formatTokens(run.cacheReadTokens) }}</span>
+            </div>
+          </div>
+
+          <section class="drawer-section">
+            <span class="section-label">Result</span>
+            @if (run.errorMessage) {
+              <div class="result-block error mono">{{ run.errorMessage }}</div>
+            }
+            @if (run.resultText) {
+              <div class="result-block mono">{{ run.resultText }}</div>
+            } @else if (!run.errorMessage) {
+              <p class="dim">{{ run.status === 'Running' ? 'The loop is still running…' : 'No result text was produced.' }}</p>
+            }
+          </section>
+
+          @if (run.testResults && run.testResults.length > 0) {
+            <section class="drawer-section">
+              <span class="section-label">Testing actions</span>
+              <div class="test-list">
+                @for (test of run.testResults; track $index) {
+                  <details class="test-result">
+                    <summary>
+                      <span class="test-name">{{ test.name }}</span>
+                      <span [class]="'chip ' + (test.passed ? 'chip-green' : 'chip-red')">
+                        {{ test.passed ? 'Passed' : 'Failed' }}
+                      </span>
+                      <span class="dim num">{{ formatDuration(test.durationMs) }}</span>
+                    </summary>
+                    <pre class="test-output">{{ test.output }}</pre>
+                  </details>
+                }
+              </div>
+            </section>
+          }
+
+          <section class="drawer-section">
+            <span class="section-label">Log</span>
+            @if (run.logs.length === 0) {
+              <p class="dim">No log lines yet.</p>
+            } @else {
+              <div class="log-lines">
+                @for (line of run.logs; track $index) {
+                  <div class="log-line" [class.warn]="line.level === 'warn'" [class.error]="line.level === 'error'">
+                    <span class="log-time">{{ logTime(line.timestampUtc) }}</span>
+                    <span class="log-msg">{{ line.message }}</span>
+                  </div>
+                }
+              </div>
+            }
+          </section>
+        } @else if (runDetailError()) {
+          <div class="empty-state">
+            <div class="glyph">⌁</div>
+            <h3>Couldn't load this run</h3>
+            <p>The API didn't respond — retrying automatically.</p>
+          </div>
+        } @else {
+          <p class="dim drawer-loading">Loading run…</p>
+        }
+      </div>
+    </aside>
+  }
+</div>

@@ -1,0 +1,109 @@
+<div class="panel-header">
+  <div>
+    <h2>Loop Agents</h2>
+    <p class="subtitle">Agents that run on a schedule and report every iteration.</p>
+  </div>
+  <button type="button" class="btn btn-primary" (click)="openCreate()">+ New agent</button>
+</div>
+
+@if (!store.loaded()) {
+  @if (!store.apiOnline()) {
+    <div class="empty-state">
+      <div class="glyph">⚡</div>
+      <h3>Can’t reach the Looper API</h3>
+      <p>Agents will appear here as soon as the connection is back.</p>
+    </div>
+  } @else {
+    <div class="empty-state">
+      <div class="glyph">∞</div>
+      <p>Loading agents…</p>
+    </div>
+  }
+} @else if (store.agents().length === 0) {
+  <div class="card empty-state agents-empty">
+    <div class="glyph">∞</div>
+    <h3>No agents yet — create your first loop.</h3>
+    <p>A loop agent wakes on its interval, works its prompt, and reports back.</p>
+    <button type="button" class="btn btn-primary" (click)="openCreate()">+ New agent</button>
+  </div>
+} @else {
+  <div class="agent-grid">
+    @for (agent of store.agents(); track agent.id) {
+      <article class="card agent-card">
+        <div class="agent-top">
+          <h3><a [routerLink]="['/agents', agent.id]">{{ agent.name }}</a></h3>
+          <div class="agent-badges">
+            @if (agent.dryRun) {
+              <span class="chip chip-amber">Dry run</span>
+            }
+            @if (agent.isRunning) {
+              <span class="chip chip-green"><span class="pulse-dot"></span>Running</span>
+            } @else if (agent.enabled) {
+              <span class="chip chip-accent">Scheduled</span>
+            } @else {
+              <span class="chip chip-neutral">Paused</span>
+            }
+          </div>
+        </div>
+
+        <div class="agent-meta">
+          <span>{{ modelShortName(agent.model) }}</span>
+          <span class="dot">·</span>
+          <span>{{ effortLabel(agent.effort) }} effort</span>
+          <span class="dot">·</span>
+          <span>{{ formatInterval(agent.intervalMinutes) }}</span>
+          <span class="dot">·</span>
+          <span>{{ agent.resourceCount }} resources</span>
+        </div>
+
+        @if (agent.description) {
+          <p class="agent-description">{{ agent.description }}</p>
+        }
+
+        <div class="agent-stats">
+          <div class="stat">
+            <span class="stat-label">Last run</span>
+            <span class="stat-value">
+              {{ relativeTime(agent.lastRunAtUtc) }}
+              @if (agent.lastRunStatus; as status) {
+                <span class="chip stat-chip" [class]="statusChipClass(status)">{{ statusLabel(status) }}</span>
+              }
+            </span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Next run</span>
+            <span class="stat-value">
+              @if (agent.enabled) {
+                {{ relativeTime(agent.nextRunAtUtc) }}
+              } @else {
+                —
+              }
+            </span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">24h</span>
+            <span class="stat-value num">{{ agent.runsLast24h }} runs · {{ formatCost(agent.costLast24hUsd) }}</span>
+          </div>
+        </div>
+
+        <div class="agent-actions">
+          <label class="switch" [title]="agent.enabled ? 'Pause the schedule' : 'Enable the schedule'">
+            <input type="checkbox" [checked]="agent.enabled" (change)="toggleEnabled(agent, $event)" />
+            <span class="track"></span>
+          </label>
+          <button type="button" class="btn btn-soft btn-sm" [disabled]="agent.isRunning" (click)="runNow(agent)">Run now</button>
+          @if (agent.isRunning) {
+            <button type="button" class="btn btn-danger btn-sm" (click)="cancelRun(agent)">Cancel</button>
+          }
+          <span class="spacer"></span>
+          <button type="button" class="icon-btn" title="Edit agent" [disabled]="editLoadingId() !== null" (click)="openEdit(agent)">✎</button>
+          <button type="button" class="icon-btn" title="Delete agent" (click)="deleteAgent(agent)">🗑</button>
+        </div>
+      </article>
+    }
+  </div>
+}
+
+@if (editorOpen()) {
+  <app-agent-editor [agent]="editingAgent()" (closed)="onEditorClosed($event)" />
+}

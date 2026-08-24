@@ -1,0 +1,213 @@
+<div class="page dashboard">
+  <header class="page-header">
+    <div>
+      <h1>Dashboard</h1>
+      <p class="subtitle">What your loops cost and deliver.</p>
+    </div>
+    <div class="segmented" role="group" aria-label="Period">
+      @for (p of periods; track p) {
+        <button
+          type="button"
+          [class.active]="days() === p"
+          [attr.aria-pressed]="days() === p"
+          (click)="setDays(p)"
+        >
+          {{ p }}d
+        </button>
+      }
+    </div>
+  </header>
+
+  @if (apiError()) {
+    <div class="stale-note">
+      Couldn’t reach the Looper API —
+      {{ summary() ? 'showing the last loaded data.' : 'the numbers will fill in once it’s back.' }}
+    </div>
+  }
+
+  <!-- KPI tiles -->
+  <section class="kpis" [class.dim]="refreshing()">
+    <div class="card kpi">
+      <span class="section-label">Total spend</span>
+      <div class="kpi-value num">{{ spendText() }}</div>
+      <div class="kpi-delta">
+        @if (spendTrend(); as t) {
+          <span
+            class="trend num"
+            [class.bad]="t.dir === 'up'"
+            [class.good]="t.dir === 'down'"
+            [class.flat]="t.dir === 'flat'"
+            >{{ t.arrow }} {{ t.text }}</span
+          >
+          <span class="vs">vs prev {{ days() }}d</span>
+        }
+      </div>
+    </div>
+
+    <div class="card kpi">
+      <span class="section-label">Runs</span>
+      <div class="kpi-value num">{{ runsText() }}</div>
+      <div class="kpi-delta">
+        @if (runsTrend(); as t) {
+          <span class="trend num" [class.accent]="t.dir === 'up'" [class.flat]="t.dir !== 'up'"
+            >{{ t.arrow }} {{ t.text }}</span
+          >
+          <span class="vs">vs prev {{ days() }}d</span>
+        }
+      </div>
+    </div>
+
+    <div class="card kpi">
+      <span class="section-label">Success rate</span>
+      <div class="kpi-value num {{ successKpiClass() }}">{{ successText() }}</div>
+      <div class="kpi-delta"><span class="vs">of completed runs</span></div>
+    </div>
+
+    <div class="card kpi">
+      <span class="section-label">Avg run time</span>
+      <div class="kpi-value num">{{ avgTimeText() }}</div>
+      <div class="kpi-delta"><span class="vs">per completed run</span></div>
+    </div>
+
+    <div class="card kpi">
+      <span class="section-label">Active agents</span>
+      <div class="kpi-value num">{{ agentsText() }}</div>
+      <div class="kpi-delta"><span class="vs">enabled of configured</span></div>
+    </div>
+  </section>
+
+  <!-- Spend over time -->
+  <section class="card block" [class.dim]="refreshing()">
+    <div class="card-head">
+      <h3>Spend over time</h3>
+      <span class="card-hint">daily cost · last {{ days() }} days</span>
+    </div>
+    @if (loadedOnce()) {
+      <app-spend-chart [points]="series()" />
+    } @else {
+      <div class="loading-hint">Loading…</div>
+    }
+  </section>
+
+  <!-- Cost by agent / by model -->
+  <section class="two-col" [class.dim]="refreshing()">
+    <div class="card">
+      <div class="card-head">
+        <h3>Cost by agent</h3>
+        <span class="card-hint">top 8 by spend</span>
+      </div>
+      @if (detailsLoaded()) {
+        <app-bar-list
+          [rows]="agentRows()"
+          emptyGlyph="🤖"
+          emptyTitle="No agent spend yet"
+          emptyText="Costs by agent appear once loops run in this period."
+        />
+      } @else {
+        <div class="loading-hint">Loading…</div>
+      }
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <h3>Cost by model</h3>
+        <span class="card-hint">by spend</span>
+      </div>
+      @if (detailsLoaded()) {
+        <app-bar-list
+          [rows]="modelRows()"
+          emptyGlyph="🧠"
+          emptyTitle="No model usage yet"
+          emptyText="Model spend appears once loops run in this period."
+        />
+      } @else {
+        <div class="loading-hint">Loading…</div>
+      }
+    </div>
+  </section>
+
+  <!-- Recent failures -->
+  <section class="card block">
+    <div class="card-head">
+      <h3>Recent failures</h3>
+    </div>
+    @if (!detailsLoaded()) {
+      <div class="loading-hint">Loading…</div>
+    } @else if (failures().length === 0) {
+      <div class="empty-state success">
+        <div class="glyph">🎉</div>
+        <h3>No failures in this period</h3>
+        <p>Every recent run completed cleanly.</p>
+      </div>
+    } @else {
+      <ul class="failure-list">
+        @for (f of failures(); track f.runId) {
+          <li class="failure-row">
+            <span class="chip chip-red">{{ f.status === 'TimedOut' ? 'Timed out' : 'Failed' }}</span>
+            <a class="agent-link" [routerLink]="['/agents', f.agentId]">{{ f.agentName }}</a>
+            <span class="when num">{{ relativeTime(f.startedAtUtc) }}</span>
+            <span class="err mono" [title]="f.errorMessage ?? ''">{{
+              f.errorMessage || 'No error message captured'
+            }}</span>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+
+  <!-- Agent breakdown table — the accessible view behind the charts -->
+  <section class="card block" [class.dim]="refreshing()">
+    <div class="card-head">
+      <h3>Agent breakdown</h3>
+      <span class="card-hint">the numbers behind the charts</span>
+    </div>
+    @if (!detailsLoaded()) {
+      <div class="loading-hint">Loading…</div>
+    } @else if (sortedBreakdown().length === 0) {
+      <div class="empty-state">
+        <div class="glyph">📭</div>
+        <h3>No runs in this period</h3>
+        <p>Once agents start looping, their economics land here.</p>
+      </div>
+    } @else {
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>Agent</th>
+              <th>Model</th>
+              <th class="r">Runs</th>
+              <th class="r">Success</th>
+              <th class="r">Avg duration</th>
+              <th class="r">Cost / run</th>
+              <th class="r">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (a of sortedBreakdown(); track a.agentId) {
+              <tr>
+                <td>
+                  <a class="agent-link" [routerLink]="['/agents', a.agentId]">{{ a.name }}</a>
+                  @if (!a.enabled) {
+                    <span class="chip chip-neutral off-chip">off</span>
+                  }
+                </td>
+                <td class="muted">{{ modelShortName(a.model) }}</td>
+                <td class="r num">{{ a.runs }}</td>
+                <td class="r num">
+                  @if (a.runs > 0) {
+                    <span class="dot {{ successClass(a.successRate) }}"></span>{{ formatPercent(a.successRate) }}
+                  } @else {
+                    <span class="muted">—</span>
+                  }
+                </td>
+                <td class="r num">{{ a.runs > 0 ? formatDuration(a.avgDurationMs) : '—' }}</td>
+                <td class="r num">{{ a.runs > 0 ? formatCost(a.avgCostPerRunUsd) : '—' }}</td>
+                <td class="r num strong">{{ formatCost(a.costUsd) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+</div>

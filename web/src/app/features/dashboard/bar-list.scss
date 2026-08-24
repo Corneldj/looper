@@ -1,0 +1,110 @@
+:host {
+  display: block;
+  position: relative;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(84px, 150px) 1fr auto;
+  align-items: center;
+  gap: 14px;
+  border-radius: 6px;
+  outline: none;
+}
+
+.row:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.label {
+  font-size: 13px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.track {
+  position: relative;
+  height: 14px;
+}
+
+.fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  border-radius: 0 4px 4px 0; /* rounded data-end only, square at the baseline */
+  transition: filter 0.1s ease;
+}
+
+.fill.lift {
+  filter: brightness(1.12);
+}
+
+.value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ---------- shared tooltip (one per chart, hover-only) ---------- */
+
+.viz-tip {
+  position: absolute;
+  z-index: 5;
+  min-width: 170px;
+  max-width: 240px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+  font-size: 12.5px;
+}
+
+.tip-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 700;
+  font-size: 12.5px;
+  margin-bottom: 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.tip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  line-height: 1.7;
+}
+
+.tip-row .k {
+  color: var(--text-2);
+}
+
+.tip-row .v {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.tip-row.alert .v {
+  color: var(--red);
+}

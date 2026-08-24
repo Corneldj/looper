@@ -1,0 +1,93 @@
+<div class="modal-backdrop" (keydown.escape)="onEscape($event)">
+  <div class="modal picker-modal">
+    <div class="modal-header">
+      <h2>Choose a folder</h2>
+      <button class="icon-btn" title="Close" (click)="cancel()">✕</button>
+    </div>
+
+    <div class="path-row">
+      <input
+        #pathBox
+        class="input mono"
+        aria-label="Folder path"
+        [(ngModel)]="pathInput"
+        (keydown.enter)="goToTypedPath()"
+        placeholder="/home/you/projects"
+      />
+      <button class="btn btn-ghost btn-sm" (click)="goToTypedPath()">Go</button>
+    </div>
+
+    @if (listing(); as current) {
+      <div class="quick-links">
+        @for (link of current.quickLinks; track link.path) {
+          <button type="button" class="chip chip-neutral quick-link" (click)="navigate(link.path)">
+            {{ link.label }}
+          </button>
+        }
+      </div>
+
+      <nav class="breadcrumbs" aria-label="Folder path">
+        @for (crumb of breadcrumbs(); track crumb.path; let last = $last) {
+          <button type="button" class="crumb" [class.current]="last" (click)="navigate(crumb.path)">
+            {{ crumb.label }}
+          </button>
+          @if (!last) {
+            <span class="crumb-sep">›</span>
+          }
+        }
+      </nav>
+    }
+
+    <div class="listing" [class.busy]="loading()">
+      @if (loadError(); as message) {
+        <p class="listing-error">{{ message }}</p>
+      } @else if (listing(); as current) {
+        @if (!current.exists) {
+          <div class="empty-state">
+            <div class="glyph">🔍</div>
+            <h3>That folder doesn’t exist</h3>
+            <p>Check the path above, or jump to one of the shortcuts.</p>
+          </div>
+        } @else if (current.error) {
+          <p class="listing-error">{{ current.error }}</p>
+        } @else {
+          @if (current.parentPath) {
+            <button type="button" class="dir-row up" (click)="navigate(current.parentPath)">
+              <span class="dir-icon">↑</span>
+              <span class="dir-name">Up one level</span>
+            </button>
+          }
+          @for (dir of visibleDirectories(); track dir.path) {
+            <button type="button" class="dir-row" [class.hidden-dir]="dir.isHidden" (click)="navigate(dir.path)">
+              <span class="dir-icon">📁</span>
+              <span class="dir-name">{{ dir.name }}</span>
+            </button>
+          }
+          @if (visibleDirectories().length === 0) {
+            <p class="no-subfolders">No sub-folders here — choose this folder or go back up.</p>
+          }
+        }
+      } @else {
+        <p class="no-subfolders">Loading…</p>
+      }
+    </div>
+
+    <div class="picker-footer">
+      @if (hiddenCount() > 0) {
+        <label class="hidden-toggle">
+          <span class="switch">
+            <input type="checkbox" [checked]="showHidden()" (change)="showHidden.set(!showHidden())" />
+            <span class="track"></span>
+          </span>
+          <span>Show hidden ({{ hiddenCount() }})</span>
+        </label>
+      }
+      <div class="picker-actions">
+        <button class="btn btn-ghost" (click)="cancel()">Cancel</button>
+        <button class="btn btn-primary" [disabled]="!listing()?.exists" (click)="choose()">
+          Use this folder
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
