@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
   AgentBreakdownDto,
+  ArchitectureMapDto,
   AgentDetailDto,
   AgentSummaryDto,
   ClaudeInstallResultDto,
@@ -65,6 +66,12 @@ export class ApiService {
 
   deleteResourceType(typeKey: string): Observable<void> {
     return this.http.delete<void>(`${API_BASE}/resource-types/${typeKey}`);
+  }
+
+  // ---------- Architecture map ----------
+
+  getArchitectureMap(): Observable<ArchitectureMapDto> {
+    return this.http.get<ArchitectureMapDto>(`${API_BASE}/architecture/map`);
   }
 
   // ---------- Delivery: PRs, escalations, and the five metrics ----------

@@ -24,7 +24,7 @@ describe('App', () => {
     const element: HTMLElement = fixture.nativeElement;
     expect(element.querySelector('.brand-name')?.textContent).toContain('Looper');
     const navLinks = [...element.querySelectorAll('.nav a')].map(a => a.textContent?.trim());
-    expect(navLinks).toEqual(['Workbench', 'Dashboard']);
+    expect(navLinks).toEqual(['Workbench', 'Map', 'Dashboard']);
   });
 
   it('shows the setup banner only while Claude Code is missing', () => {

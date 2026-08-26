@@ -363,3 +363,37 @@ export const AUTONOMY_LEVELS: { level: number; label: string; blurb: string }[] 
   { level: 3, label: 'L3 · Autonomous', blurb: 'Executes autonomously; humans review after the fact.' },
   { level: 4, label: 'L4 · Audited', blurb: 'Fully autonomous with sampled audits.' },
 ];
+
+// ---------- Architecture map ----------
+
+export interface MapResourceDto {
+  id: string;
+  name: string;
+  type: ResourceType;
+  customTypeKey: string | null;
+  icon: string;
+  typeLabel: string;
+  agentIds: string[];
+}
+
+export interface MapAgentDto {
+  id: string;
+  name: string;
+  model: string;
+  autonomyLevel: number;
+  enabled: boolean;
+  dryRun: boolean;
+  isRunning: boolean;
+  intervalMinutes: number;
+  lastRunStatus: RunStatus | null;
+  runsLast24h: number;
+  costLast24hUsd: number;
+  openPrs: number;
+  mergedPrs: number;
+  resourceIds: string[];
+}
+
+export interface ArchitectureMapDto {
+  resources: MapResourceDto[];
+  agents: MapAgentDto[];
+}

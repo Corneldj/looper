@@ -8,6 +8,11 @@ export const routes: Routes = [
     title: 'Looper — Workbench',
   },
   {
+    path: 'map',
+    loadComponent: () => import('./features/architecture-map/architecture-map').then(m => m.ArchitectureMap),
+    title: 'Looper — Map',
+  },
+  {
     path: 'dashboard',
     loadComponent: () => import('./features/dashboard/dashboard').then(m => m.Dashboard),
     title: 'Looper — Dashboard',

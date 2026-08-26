@@ -1,0 +1,189 @@
+.loading-note {
+  color: var(--text-3);
+  font-size: 13px;
+  padding: 12px 2px;
+}
+
+.legend {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+
+  &.running {
+    background: var(--green);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  &.scheduled { background: var(--accent); }
+  &.paused { background: var(--border-strong); }
+}
+
+/* ---------- canvas ---------- */
+
+.map-canvas {
+  position: relative;
+  padding-top: 8px;
+}
+
+.column-headers {
+  position: relative;
+
+  .col-label {
+    position: absolute;
+    top: -6px;
+  }
+}
+
+.edges {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  pointer-events: none;
+}
+
+/* Edges: one neutral hue; state is the only color change. */
+.edge {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+  transition: stroke 0.15s ease, opacity 0.15s ease;
+
+  &.running {
+    stroke: var(--green);
+    stroke-dasharray: 6 5;
+    animation: flow 0.9s linear infinite;
+  }
+  &.focus {
+    stroke: var(--accent);
+    stroke-width: 2;
+  }
+  &.faded { opacity: 0.18; }
+}
+
+@keyframes flow {
+  to { stroke-dashoffset: -11; }
+}
+
+/* ---------- nodes ---------- */
+
+.nodes {
+  position: relative;
+}
+
+.node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  padding: 8px 14px;
+  transition: opacity 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+
+  &.focus {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-md);
+  }
+  &.faded { opacity: 0.3; }
+}
+
+.group-label {
+  position: absolute;
+  left: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.node.resource {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  cursor: default;
+
+  .res-icon { font-size: 16px; flex: none; }
+  .res-name {
+    font-size: 13px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &.unused {
+    border-style: dashed;
+    opacity: 0.65;
+  }
+  &.unused.faded { opacity: 0.2; }
+}
+
+.node.agent {
+  color: inherit;
+  cursor: pointer;
+
+  &:hover { border-color: var(--accent); }
+
+  .agent-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .agent-name {
+    font-size: 14px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dry-chip {
+    flex: none;
+    font-size: 10.5px;
+    padding: 1px 7px;
+  }
+  .agent-meta {
+    font-size: 11.5px;
+    color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dim-meta { color: var(--text-3); }
+}
+
+.node.delivery {
+  background: var(--surface-2);
+
+  .deliv-main {
+    font-size: 12.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .deliv-sub {
+    font-size: 11px;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .quiet-text {
+    color: var(--text-3);
+    font-weight: 500;
+  }
+  &.quiet { border-style: dashed; }
+}
