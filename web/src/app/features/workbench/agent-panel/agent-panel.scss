@@ -16,6 +16,13 @@
   }
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
 .agent-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr));

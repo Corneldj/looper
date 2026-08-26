@@ -86,3 +86,33 @@
   .input { flex: 1; min-width: 0; }
   .btn { flex: none; }
 }
+
+/* Rule Set: compact managed list */
+.ruleset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ruleset-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  .rule-switch {
+    transform: scale(0.85);
+    transform-origin: left center;
+  }
+  .rule-input { flex: 1; min-width: 0; }
+  .rule-remove { flex: none; }
+
+  &.disabled .rule-input {
+    opacity: 0.55;
+    text-decoration: line-through;
+  }
+}
+
+.add-rule {
+  align-self: flex-start;
+  margin-top: 6px;
+}

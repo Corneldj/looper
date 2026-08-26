@@ -26,6 +26,17 @@ public sealed class RuleConfig
     public string Text { get; set; } = "";
 }
 
+public sealed class RuleSetConfig
+{
+    public List<RuleItem> Rules { get; set; } = [];
+}
+
+public sealed class RuleItem
+{
+    public string Text { get; set; } = "";
+    public bool Enabled { get; set; } = true;
+}
+
 public sealed class RagConfig
 {
     public string? Path { get; set; }
@@ -46,6 +57,48 @@ public sealed class TestingActionConfig
     public string Command { get; set; } = "";
     public string? WorkingDirectory { get; set; }
     public int? TimeoutSeconds { get; set; }
+}
+
+public sealed class WorkspacePoolConfig
+{
+    /// <summary>Directory the workspaces are provisioned under.</summary>
+    public string RootPath { get; set; } = "";
+
+    /// <summary>blank | git-clone | copy-template.</summary>
+    public string Provisioning { get; set; } = "blank";
+
+    /// <summary>Repo URL for git-clone, or the template folder for copy-template.</summary>
+    public string? Source { get; set; }
+
+    /// <summary>Days after a workspace is marked done before the janitor removes its directory.</summary>
+    public int RetentionDays { get; set; } = 14;
+
+    /// <summary>Cap on non-cleaned workspaces; null = unbounded.</summary>
+    public int? MaxWorkspaces { get; set; }
+}
+
+public sealed class UserActionConfig
+{
+    /// <summary>Optional guidance on when the agent should raise a request.</summary>
+    public string? Instructions { get; set; }
+
+    /// <summary>Whether raised requests park the schedule until the user resolves them.</summary>
+    public bool BlockScheduling { get; set; } = true;
+}
+
+public sealed class ReviewerConfig
+{
+    /// <summary>What "acceptable" means — the criteria the reviewer judges against.</summary>
+    public string Rubric { get; set; } = "";
+
+    /// <summary>Reviewing model; null/empty means the worker agent's own model.</summary>
+    public string? Model { get; set; }
+
+    /// <summary>How many fix-and-re-review cycles before the run fails review.</summary>
+    public int MaxFixRounds { get; set; } = 2;
+
+    /// <summary>When review ultimately fails, also escalate the run to a human.</summary>
+    public bool EscalateOnFail { get; set; }
 }
 
 public sealed class CredentialConfig

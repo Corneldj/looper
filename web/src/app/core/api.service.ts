@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
   AgentBreakdownDto,
+  ArchitectResultDto,
   ArchitectureMapDto,
   AgentDetailDto,
   AgentSummaryDto,
@@ -24,6 +25,9 @@ import {
   RunDetailDto,
   RunSummaryDto,
   SaveAgentRequest,
+  UserActionDto,
+  WorkspaceClaimDto,
+  WorkspaceDto,
 } from './models';
 
 export const API_BASE = 'http://localhost:5210/api';
@@ -105,6 +109,47 @@ export class ApiService {
 
   escalateRun(runId: string, reason: string): Observable<void> {
     return this.http.post<void>(`${API_BASE}/runs/${runId}/escalate`, { reason });
+  }
+
+  // ---------- Architect (AI workflow builder) ----------
+
+  /** Long-running: the architect composes resources and agents through the API (minutes). */
+  buildWorkflow(description: string): Observable<ArchitectResultDto> {
+    return this.http.post<ArchitectResultDto>(`${API_BASE}/architect/build`, { description });
+  }
+
+  // ---------- User action requests ----------
+
+  getUserActions(agentId?: string, includeResolved = false): Observable<UserActionDto[]> {
+    let params = new HttpParams();
+    if (agentId) params = params.set('agentId', agentId);
+    if (includeResolved) params = params.set('includeResolved', true);
+    return this.http.get<UserActionDto[]>(`${API_BASE}/user-actions`, { params });
+  }
+
+  /** Resolve a request; the optional response reaches the agent's next run as context. */
+  resolveUserAction(id: string, response?: string): Observable<UserActionDto> {
+    return this.http.post<UserActionDto>(`${API_BASE}/user-actions/${id}/resolve`, { response: response ?? null });
+  }
+
+  // ---------- Dynamic workspaces ----------
+
+  getWorkspaces(resourceId?: string): Observable<WorkspaceDto[]> {
+    const params = resourceId ? new HttpParams().set('resourceId', resourceId) : undefined;
+    return this.http.get<WorkspaceDto[]>(`${API_BASE}/workspaces`, { params });
+  }
+
+  claimWorkspace(body: { resourceId: string; unit: string; context?: string | null }): Observable<WorkspaceClaimDto> {
+    return this.http.post<WorkspaceClaimDto>(`${API_BASE}/workspaces`, body);
+  }
+
+  completeWorkspace(id: string, summary?: string): Observable<void> {
+    return this.http.post<void>(`${API_BASE}/workspaces/${id}/done`, { summary: summary ?? null });
+  }
+
+  /** Removes the workspace directory immediately; the record remains as history. */
+  cleanWorkspace(id: string): Observable<void> {
+    return this.http.delete<void>(`${API_BASE}/workspaces/${id}`);
   }
 
   // ---------- Claude CLI status ----------

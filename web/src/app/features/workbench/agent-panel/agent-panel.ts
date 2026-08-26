@@ -2,22 +2,26 @@ import { Component, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../../../core/api.service';
-import { AgentsStore } from '../../../core/stores';
-import { AgentDetailDto, AgentSummaryDto, AUTONOMY_LEVELS, EFFORT_LEVELS, EffortLevel, RunStatus } from '../../../core/models';
+import { AgentsStore, UserActionsStore } from '../../../core/stores';
+import { AgentDetailDto, AgentSummaryDto, AUTONOMY_LEVELS, EFFORT_LEVELS, EffortLevel, RunStatus, UserActionDto } from '../../../core/models';
 import { formatCost, formatInterval, modelShortName, relativeTime } from '../../../core/format';
 import { AgentEditor } from './agent-editor';
+import { ArchitectModal } from '../architect-modal';
 
 @Component({
   selector: 'app-agent-panel',
-  imports: [RouterLink, AgentEditor],
+  imports: [RouterLink, AgentEditor, ArchitectModal],
   templateUrl: './agent-panel.html',
   styleUrl: './agent-panel.scss',
 })
 export class AgentPanel {
   protected readonly store = inject(AgentsStore);
+  protected readonly userActionsStore = inject(UserActionsStore);
   private readonly api = inject(ApiService);
 
   protected readonly editorOpen = signal(false);
+  /** The ✨ Architect (AI workflow builder) modal. */
+  protected readonly architectOpen = signal(false);
   protected readonly editingAgent = signal<AgentDetailDto | null>(null);
   protected readonly editLoadingId = signal<string | null>(null);
 
@@ -29,6 +33,16 @@ export class AgentPanel {
 
   protected effortLabel(effort: EffortLevel): string {
     return EFFORT_LEVELS.find(level => level.id === effort)?.label ?? effort;
+  }
+
+  /** Open User Action Requests raised by this agent (polled by the store). */
+  protected openRequests(agentId: string): UserActionDto[] {
+    return this.userActionsStore.forAgent(agentId);
+  }
+
+  /** True when a blocking request parks the loop — Run now is pointless until it's resolved. */
+  protected hasBlockingRequest(agentId: string): boolean {
+    return this.userActionsStore.forAgent(agentId).some(r => r.blocking);
   }
 
   protected autonomyBlurb(level: number): string {
@@ -85,7 +99,7 @@ export class AgentPanel {
   }
 
   protected runNow(agent: AgentSummaryDto): void {
-    if (agent.isRunning) return;
+    if (agent.isRunning || this.hasBlockingRequest(agent.id)) return;
     this.api.runAgentNow(agent.id).subscribe({
       next: () => this.store.refreshNow(),
       error: (err: HttpErrorResponse) => {

@@ -34,8 +34,20 @@ public class AgentRun
     public bool Escalated { get; set; }
     public string? EscalationReason { get; set; }
 
+    /// <summary>The run raised a User Action Request — the loop is waiting on the human. Not a failure.</summary>
+    public bool ActionRequested { get; set; }
+
     /// <summary>Snapshot of the agent's dry-run flag at trigger time; simulated cost stays out of delivery metrics.</summary>
     public bool DryRun { get; set; }
+
+    /// <summary>Verdict of the independent review gate; null when no Reviewer resource is attached.</summary>
+    public bool? ReviewPassed { get; set; }
+
+    /// <summary>Fix-and-re-review cycles the run needed. 0 with a passing review = first-pass acceptance.</summary>
+    public int ReviewRounds { get; set; }
+
+    /// <summary>Serialized review rounds (reviewer, verdict, summary, fix instructions, cost).</summary>
+    public string? ReviewJson { get; set; }
 
     public decimal CostUsd { get; set; }
     public long InputTokens { get; set; }

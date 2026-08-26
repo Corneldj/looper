@@ -111,11 +111,56 @@ export class ResourceEditor implements OnInit {
   // ---------- Rule ----------
   readonly ruleText = signal('');
 
+  // ---------- RuleSet ----------
+  readonly setRules = signal<{ text: string; enabled: boolean }[]>([{ text: '', enabled: true }]);
+
+  addSetRule(): void {
+    this.setRules.update(rules => [...rules, { text: '', enabled: true }]);
+  }
+
+  removeSetRule(index: number): void {
+    this.setRules.update(rules => (rules.length > 1 ? rules.filter((_, i) => i !== index) : rules));
+  }
+
+  updateSetRule(index: number, patch: Partial<{ text: string; enabled: boolean }>): void {
+    this.setRules.update(rules => rules.map((rule, i) => (i === index ? { ...rule, ...patch } : rule)));
+  }
+
   // ---------- SubAgent ----------
   readonly subDescription = signal('');
   readonly subPrompt = signal('');
   readonly subTools = signal('');
   readonly subModel = signal('');
+
+  // ---------- WorkspacePool ----------
+  readonly poolRootPath = signal('');
+  readonly poolProvisioning = signal<'blank' | 'git-clone' | 'copy-template'>('blank');
+  readonly poolSource = signal('');
+  readonly poolRetentionDays = signal<number | null>(14);
+  readonly poolMaxWorkspaces = signal<number | null>(null);
+  readonly poolPickerTarget = signal<'root' | 'source' | null>(null);
+
+  openPoolPicker(target: 'root' | 'source'): void {
+    this.poolPickerTarget.set(target);
+  }
+
+  onPoolFolderPicked(picked: string | null): void {
+    const target = this.poolPickerTarget();
+    this.poolPickerTarget.set(null);
+    if (!picked || !target) return;
+    if (target === 'root') this.poolRootPath.set(picked);
+    else this.poolSource.set(picked);
+  }
+
+  // ---------- UserAction ----------
+  readonly actionInstructions = signal('');
+  readonly actionBlocking = signal(true);
+
+  // ---------- Reviewer ----------
+  readonly rubric = signal('');
+  readonly reviewerModel = signal('');
+  readonly maxFixRounds = signal<number | null>(2);
+  readonly escalateOnFail = signal(false);
 
   // ---------- AzureConnection ----------
   readonly tenantId = signal('');
@@ -145,6 +190,8 @@ export class ResourceEditor implements OnInit {
         return !!this.testCommand().trim();
       case 'Rule':
         return !!this.ruleText().trim();
+      case 'RuleSet':
+        return this.setRules().some(rule => rule.text.trim().length > 0);
       case 'SubAgent':
         return !!this.subDescription().trim() && !!this.subPrompt().trim();
       case 'AzureConnection':
@@ -156,6 +203,15 @@ export class ResourceEditor implements OnInit {
         );
       case 'PatToken':
         return !!this.envVar().trim() && !!this.tokenValue();
+      case 'Reviewer':
+        return !!this.rubric().trim();
+      case 'UserAction':
+        return true; // only the name is required
+      case 'WorkspacePool':
+        return (
+          !!this.poolRootPath().trim() &&
+          (this.poolProvisioning() === 'blank' || !!this.poolSource().trim())
+        );
       case 'Custom':
         return this.customFields().every(field => {
           if (!field.required) return true;
@@ -254,6 +310,16 @@ export class ResourceEditor implements OnInit {
       case 'Rule':
         this.ruleText.set(str('text'));
         break;
+      case 'RuleSet': {
+        const raw = config['rules'];
+        const rules = Array.isArray(raw)
+          ? raw
+              .filter((r): r is { text?: unknown; enabled?: unknown } => !!r && typeof r === 'object')
+              .map(r => ({ text: typeof r.text === 'string' ? r.text : '', enabled: r.enabled !== false }))
+          : [];
+        this.setRules.set(rules.length > 0 ? rules : [{ text: '', enabled: true }]);
+        break;
+      }
       case 'SubAgent':
         this.subDescription.set(str('description'));
         this.subPrompt.set(str('prompt'));
@@ -269,6 +335,31 @@ export class ResourceEditor implements OnInit {
       case 'PatToken':
         this.envVar.set(str('envVar'));
         this.tokenValue.set(str('value'));
+        break;
+      case 'WorkspacePool': {
+        this.poolRootPath.set(str('rootPath'));
+        const mode = config['provisioning'];
+        this.poolProvisioning.set(mode === 'git-clone' || mode === 'copy-template' ? mode : 'blank');
+        this.poolSource.set(str('source'));
+        this.poolRetentionDays.set(
+          typeof config['retentionDays'] === 'number' ? (config['retentionDays'] as number) : 14,
+        );
+        this.poolMaxWorkspaces.set(
+          typeof config['maxWorkspaces'] === 'number' ? (config['maxWorkspaces'] as number) : null,
+        );
+        break;
+      }
+      case 'UserAction':
+        this.actionInstructions.set(str('instructions'));
+        this.actionBlocking.set(config['blockScheduling'] !== false);
+        break;
+      case 'Reviewer':
+        this.rubric.set(str('rubric'));
+        this.reviewerModel.set(str('model'));
+        this.maxFixRounds.set(
+          typeof config['maxFixRounds'] === 'number' ? (config['maxFixRounds'] as number) : 2,
+        );
+        this.escalateOnFail.set(config['escalateOnFail'] === true);
         break;
       case 'Custom': {
         const values: Record<string, unknown> = {};
@@ -314,6 +405,12 @@ export class ResourceEditor implements OnInit {
       }
       case 'Rule':
         return { text: this.ruleText().trim() };
+      case 'RuleSet':
+        return {
+          rules: this.setRules()
+            .map(rule => ({ text: rule.text.trim(), enabled: rule.enabled }))
+            .filter(rule => rule.text.length > 0),
+        };
       case 'SubAgent': {
         const config: Record<string, unknown> = {
           description: this.subDescription().trim(),
@@ -332,6 +429,37 @@ export class ResourceEditor implements OnInit {
         };
       case 'PatToken':
         return { envVar: this.envVar().trim(), value: this.tokenValue() };
+      case 'WorkspacePool': {
+        const config: Record<string, unknown> = {
+          rootPath: this.poolRootPath().trim(),
+          provisioning: this.poolProvisioning(),
+          retentionDays:
+            this.poolRetentionDays() != null && this.poolRetentionDays()! >= 0
+              ? Math.round(this.poolRetentionDays()!)
+              : 14,
+        };
+        if (this.poolProvisioning() !== 'blank' && this.poolSource().trim()) {
+          config['source'] = this.poolSource().trim();
+        }
+        if (this.poolMaxWorkspaces() != null && this.poolMaxWorkspaces()! > 0) {
+          config['maxWorkspaces'] = Math.round(this.poolMaxWorkspaces()!);
+        }
+        return config;
+      }
+      case 'UserAction': {
+        const config: Record<string, unknown> = { blockScheduling: this.actionBlocking() };
+        if (this.actionInstructions().trim()) config['instructions'] = this.actionInstructions().trim();
+        return config;
+      }
+      case 'Reviewer': {
+        const config: Record<string, unknown> = {
+          rubric: this.rubric().trim(),
+          maxFixRounds: this.maxFixRounds() != null && this.maxFixRounds()! >= 0 ? Math.round(this.maxFixRounds()!) : 2,
+          escalateOnFail: this.escalateOnFail(),
+        };
+        if (this.reviewerModel()) config['model'] = this.reviewerModel();
+        return config;
+      }
       case 'Custom': {
         const config: Record<string, unknown> = {};
         for (const field of this.customFields()) {

@@ -11,6 +11,7 @@ public sealed record RunSummaryDto(
     RunStatus Status,
     RunTrigger Trigger,
     bool Escalated,
+    bool ActionRequested,
     decimal CostUsd,
     long InputTokens,
     long OutputTokens,
@@ -18,6 +19,8 @@ public sealed record RunSummaryDto(
     int NumTurns,
     long DurationMs,
     bool? TestsPassed,
+    bool? ReviewPassed,
+    int ReviewRounds,
     string? ErrorMessage);
 
 public sealed record RunLogEntryDto(
@@ -43,6 +46,7 @@ public sealed record RunDetailDto(
     RunStatus Status,
     RunTrigger Trigger,
     bool Escalated,
+    bool ActionRequested,
     decimal CostUsd,
     long InputTokens,
     long OutputTokens,
@@ -51,11 +55,22 @@ public sealed record RunDetailDto(
     int NumTurns,
     long DurationMs,
     bool? TestsPassed,
+    bool? ReviewPassed,
+    int ReviewRounds,
     string? ErrorMessage,
     string? EscalationReason,
     string? ResultText,
     List<TestingActionResultDto>? TestResults,
+    List<ReviewRoundDto>? Reviews,
     List<RunLogEntryDto> Logs);
+
+public sealed record ReviewRoundDto(
+    int Round,
+    string Reviewer,
+    string Verdict,
+    string Summary,
+    string? FixInstructions,
+    decimal CostUsd);
 
 public static class RunMapper
 {
@@ -71,6 +86,7 @@ public static class RunMapper
         run.Status,
         run.Trigger,
         run.Escalated,
+        run.ActionRequested,
         run.CostUsd,
         run.InputTokens,
         run.OutputTokens,
@@ -78,6 +94,8 @@ public static class RunMapper
         run.NumTurns,
         run.DurationMs,
         run.TestsPassed,
+        run.ReviewPassed,
+        run.ReviewRounds,
         Truncate(run.ErrorMessage, SummaryErrorMaxLength));
 
     public static RunDetailDto ToDetailDto(this AgentRun run, string agentName, IEnumerable<RunLogEntry> logs) => new(
@@ -89,6 +107,7 @@ public static class RunMapper
         run.Status,
         run.Trigger,
         run.Escalated,
+        run.ActionRequested,
         run.CostUsd,
         run.InputTokens,
         run.OutputTokens,
@@ -97,14 +116,30 @@ public static class RunMapper
         run.NumTurns,
         run.DurationMs,
         run.TestsPassed,
+        run.ReviewPassed,
+        run.ReviewRounds,
         run.ErrorMessage,
         run.EscalationReason,
         run.ResultText,
         ParseTestResults(run.TestResultsJson),
+        ParseReviews(run.ReviewJson),
         logs.Select(l => new RunLogEntryDto(l.TimestampUtc, l.Level, l.Message)).ToList());
 
     private static string? Truncate(string? value, int maxLength) =>
         value is null || value.Length <= maxLength ? value : value[..maxLength];
+
+    private static List<ReviewRoundDto>? ParseReviews(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            return JsonSerializer.Deserialize<List<ReviewRoundDto>>(json, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 
     private static List<TestingActionResultDto>? ParseTestResults(string? json)
     {

@@ -29,6 +29,24 @@ public sealed class ClaudeCliExecutor(
         var (workingDirectory, additionalDirectories) = AgentWorkspace.Resolve(agent, resources);
         var contributions = await CollectModuleContributions(resources, log);
 
+        // Dynamic Workspaces pools: the agent claims per-unit directories under each pool's
+        // root at run time, so the root itself must exist and be reachable via --add-dir.
+        var poolRoots = new List<string>();
+        foreach (var (_, poolConfig) in WorkspacePools(resources))
+        {
+            try
+            {
+                var root = Path.GetFullPath(poolConfig.RootPath.Trim());
+                Directory.CreateDirectory(root);
+                poolRoots.Add(root);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                await log("warn", $"Workspace pool root '{poolConfig.RootPath}' is not usable: {ex.Message}");
+            }
+        }
+        additionalDirectories = additionalDirectories.Concat(poolRoots).Distinct().ToList();
+
         var startInfo = new ProcessStartInfo
         {
             FileName = options.Value.ClaudeCommand,
@@ -39,7 +57,7 @@ public sealed class ClaudeCliExecutor(
             UseShellExecute = false
         };
 
-        BuildArguments(startInfo.ArgumentList, agent, resources, additionalDirectories, contributions);
+        BuildArguments(startInfo.ArgumentList, agent, resources, additionalDirectories, contributions, context.FixInstructions, context.UserResponses);
 
         foreach (var (key, value) in AgentWorkspace.ResolveEnvironment(resources))
         {
@@ -137,10 +155,11 @@ public sealed class ClaudeCliExecutor(
     }
 
     private void BuildArguments(ICollection<string> args, LoopAgent agent, IReadOnlyList<Resource> resources,
-        IReadOnlyList<string> additionalDirectories, IReadOnlyList<ResourceContribution> contributions)
+        IReadOnlyList<string> additionalDirectories, IReadOnlyList<ResourceContribution> contributions,
+        string? fixInstructions, string? userResponses = null)
     {
         args.Add("-p");
-        args.Add(BuildPrompt(agent, resources, contributions));
+        args.Add(BuildPrompt(agent, resources, contributions, fixInstructions, userResponses));
         args.Add("--output-format");
         args.Add("json");
         args.Add("--model");
@@ -196,8 +215,9 @@ public sealed class ClaudeCliExecutor(
         }
     }
 
-    private static string BuildPrompt(LoopAgent agent, IReadOnlyList<Resource> resources,
-        IReadOnlyList<ResourceContribution> contributions)
+    internal static string BuildPrompt(LoopAgent agent, IReadOnlyList<Resource> resources,
+        IReadOnlyList<ResourceContribution> contributions, string? fixInstructions = null,
+        string? userResponses = null)
     {
         var ragSections = resources
             .Where(r => r.Type == ResourceType.Rag)
@@ -210,6 +230,24 @@ public sealed class ClaudeCliExecutor(
         var extraSections = contributions.SelectMany(c => c.PromptSections)
             .Where(s => !string.IsNullOrWhiteSpace(s))
             .ToList();
+        extraSections.AddRange(WorkspacePools(resources).Select(p => BuildWorkspaceProtocol(p.Resource, p.Config)));
+        foreach (var actionResource in resources.Where(r => r.Type == ResourceType.UserAction))
+        {
+            extraSections.Add(BuildUserActionProtocol(ResourceConfig.Parse<UserActionConfig>(actionResource)));
+        }
+        if (!string.IsNullOrWhiteSpace(userResponses))
+        {
+            extraSections.Insert(0,
+                "USER RESPONSES — the user has answered your earlier action request(s). Read these first and act on them:\n"
+                + userResponses);
+        }
+
+        if (!string.IsNullOrWhiteSpace(fixInstructions))
+        {
+            extraSections.Add(
+                "REVISION REQUESTED — an independent reviewer examined your previous iteration and did not accept it. " +
+                "Address these instructions before anything else, then re-verify your work:\n" + fixInstructions);
+        }
 
         if (ragSections.Count == 0 && extraSections.Count == 0) return agent.Prompt;
 
@@ -248,17 +286,58 @@ public sealed class ClaudeCliExecutor(
         "-d \"{\\\"reason\\\":\\\"<one sentence on what you need>\\\"}\". Never invent a PR url; only report PRs you actually opened.";
 
     private static string? BuildAppendedSystemPrompt(IReadOnlyList<Resource> resources,
+        IReadOnlyList<ResourceContribution> contributions) =>
+        string.Join("\n\n", CollectRules(resources, contributions).Append(DeliveryProtocol));
+
+    internal static IEnumerable<(Resource Resource, WorkspacePoolConfig Config)> WorkspacePools(
+        IReadOnlyList<Resource> resources) =>
+        resources
+            .Where(r => r.Type == ResourceType.WorkspacePool)
+            .Select(r => (Resource: r, Config: ResourceConfig.Parse<WorkspacePoolConfig>(r)))
+            .Where(p => !string.IsNullOrWhiteSpace(p.Config.RootPath));
+
+    internal static string BuildWorkspaceProtocol(Resource pool, WorkspacePoolConfig config) =>
+        $"DYNAMIC WORKSPACES — pool '{pool.Name}' (root {config.RootPath}). When your task is a distinct unit of work " +
+        "(a feature, a fix, a project), claim a dedicated workspace for it instead of working in a shared directory: " +
+        $"curl -s -X POST \"$LOOPER_API_URL/api/workspaces\" -H 'Content-Type: application/json' " +
+        $"-d \"{{\\\"resourceId\\\":\\\"{pool.Id}\\\",\\\"runId\\\":\\\"$LOOPER_RUN_ID\\\",\\\"unit\\\":\\\"<short-kebab-name>\\\",\\\"context\\\":\\\"<what this unit is about>\\\"}}\" " +
+        "— the response carries the workspace path; cd there and read WORKBRIEF.md first (re-claiming the same unit returns the same " +
+        "workspace, so iterations resume where the last one left off). Before finishing an iteration, append a handoff note to " +
+        "WORKBRIEF.md. When the unit is fully complete: " +
+        "curl -s -X POST \"$LOOPER_API_URL/api/workspaces/<workspace-id>/done\" -H 'Content-Type: application/json' -d '{\"summary\":\"<one line>\"}'. " +
+        $"List this pool's workspaces: curl -s \"$LOOPER_API_URL/api/workspaces?resourceId={pool.Id}\".";
+
+    internal static string BuildUserActionProtocol(UserActionConfig config) =>
+        "USER ACTION REQUESTS: when you are blocked by something only the user can do or decide — unclear requirements, " +
+        "a choice between real alternatives, a credential or approval you lack — raise a request instead of guessing or failing: " +
+        "curl -s -X POST \"$LOOPER_API_URL/api/user-actions\" -H 'Content-Type: application/json' " +
+        "-d \"{\\\"runId\\\":\\\"$LOOPER_RUN_ID\\\",\\\"title\\\":\\\"<one-line ask>\\\",\\\"details\\\":\\\"<exactly what you need and why, with the options if it is a decision>\\\"}\". " +
+        "Then finish the iteration cleanly, summarising what you completed and what waits on the user. Raising a request is NOT " +
+        "a failure — your loop simply pauses until the user responds, and their answer arrives in your next iteration." +
+        (string.IsNullOrWhiteSpace(config.Instructions) ? "" : " Guidance from the user on when to raise: " + config.Instructions);
+
+    /// <summary>Standing rules from Rule resources, enabled Rule Set entries, and module contributions, in resource order.</summary>
+    internal static IEnumerable<string> CollectRules(IReadOnlyList<Resource> resources,
         IReadOnlyList<ResourceContribution> contributions)
     {
-        var rules = resources
-            .Where(r => r.Type == ResourceType.Rule)
-            .Select(r => ResourceConfig.Parse<RuleConfig>(r).Text)
-            .Concat(contributions.SelectMany(c => c.SystemPromptRules))
-            .Where(t => !string.IsNullOrWhiteSpace(t))
-            .Append(DeliveryProtocol)
-            .ToList();
+        var rules = new List<string>();
+        foreach (var resource in resources)
+        {
+            if (resource.Type == ResourceType.Rule)
+            {
+                rules.Add(ResourceConfig.Parse<RuleConfig>(resource).Text);
+            }
+            else if (resource.Type == ResourceType.RuleSet)
+            {
+                rules.AddRange(ResourceConfig.Parse<RuleSetConfig>(resource).Rules
+                    .Where(rule => rule.Enabled)
+                    .Select(rule => rule.Text));
+            }
+        }
 
-        return string.Join("\n\n", rules);
+        return rules
+            .Concat(contributions.SelectMany(c => c.SystemPromptRules))
+            .Where(t => !string.IsNullOrWhiteSpace(t));
     }
 
     private static string? BuildMcpConfig(IReadOnlyList<Resource> resources,

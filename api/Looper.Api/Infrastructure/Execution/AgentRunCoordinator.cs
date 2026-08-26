@@ -14,9 +14,14 @@ public sealed class AgentRunCoordinator(
     ClaudeCliExecutor cliExecutor,
     SimulatedAgentExecutor simulatedExecutor,
     TestingActionRunner testingActionRunner,
+    ReviewRunner reviewRunner,
     IOptions<LooperOptions> options,
     ILogger<AgentRunCoordinator> logger)
 {
+    private sealed record ReviewRound(int Round, string Reviewer, string Verdict, string Summary, string? FixInstructions, decimal CostUsd);
+
+    private sealed record ReviewInfo(bool? Passed, int FixRounds, string? Json, string? EscalationReason);
+
     private sealed class ActiveRun
     {
         public Guid RunId { get; init; }
@@ -62,9 +67,27 @@ public sealed class AgentRunCoordinator(
             db.Runs.Add(run);
             await db.SaveChangesAsync(cancellationToken);
 
+            // Resolved user-action responses are delivered exactly once, on the next real run.
+            string? userResponses = null;
+            if (!agent.DryRun)
+            {
+                var undelivered = await db.UserActionRequests
+                    .Where(r => r.AgentId == agentId && r.Status == UserActionStatus.Resolved
+                        && r.Response != null && r.ResponseDeliveredAtUtc == null)
+                    .OrderBy(r => r.ResolvedAtUtc)
+                    .ToListAsync(cancellationToken);
+                if (undelivered.Count > 0)
+                {
+                    userResponses = string.Join("\n\n", undelivered.Select(r =>
+                        $"Your request \"{r.Title}\" — the user responded:\n{r.Response}"));
+                    foreach (var r in undelivered) r.ResponseDeliveredAtUtc = DateTime.UtcNow;
+                    await db.SaveChangesAsync(cancellationToken);
+                }
+            }
+
             // Detach the agent graph from the scoped context; execution runs on its own contexts.
             var resources = agent.Resources.ToList();
-            _ = Task.Run(() => ExecuteAsync(agent, resources, active), CancellationToken.None);
+            _ = Task.Run(() => ExecuteAsync(agent, resources, active, userResponses), CancellationToken.None);
             return active.RunId;
         }
         catch
@@ -82,7 +105,8 @@ public sealed class AgentRunCoordinator(
         return true;
     }
 
-    private async Task ExecuteAsync(LoopAgent agent, IReadOnlyList<Resource> resources, ActiveRun active)
+    private async Task ExecuteAsync(LoopAgent agent, IReadOnlyList<Resource> resources, ActiveRun active,
+        string? userResponses = null)
     {
         var runId = active.RunId;
         RunLogWriter log = (level, message) => AppendLogAsync(runId, level, message);
@@ -108,7 +132,7 @@ public sealed class AgentRunCoordinator(
                 timeoutCts.Token, active.UserCancellation.Token);
 
             var executor = agent.DryRun ? (IAgentExecutor)simulatedExecutor : cliExecutor;
-            var context = new AgentExecutionContext(agent, resources, runId);
+            var context = new AgentExecutionContext(agent, resources, runId, UserResponses: userResponses);
 
             AgentExecutionOutcome outcome;
             try
@@ -145,7 +169,22 @@ public sealed class AgentRunCoordinator(
                 await log("info", "[dry run] Testing actions skipped.");
             }
 
-            await FinalizeAsync(runId, agent.Id, outcome, testResults);
+            // The review gate: completion is not acceptance. Independent reviewers judge the
+            // work; failures loop fix instructions back through the worker until they pass
+            // or the fix budget runs out.
+            ReviewInfo review;
+            try
+            {
+                (outcome, testResults, review) = await RunReviewGateAsync(
+                    agent, resources, runId, executor, outcome, testResults, log, linkedCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                await FinalizeCancelledAsync(runId, agent.Id, timeoutCts.IsCancellationRequested, log);
+                return;
+            }
+
+            await FinalizeAsync(runId, agent.Id, outcome, testResults, review);
         }
         catch (Exception ex)
         {
@@ -160,8 +199,133 @@ public sealed class AgentRunCoordinator(
         }
     }
 
+    /// <summary>
+    /// Runs every attached Reviewer against the completed work. On failure, the worker gets the
+    /// combined fix instructions and runs again (testing actions re-gate the revision), up to the
+    /// largest MaxFixRounds among reviewers. Cost, tokens and turns accumulate onto the outcome.
+    /// </summary>
+    private async Task<(AgentExecutionOutcome Outcome, (string, bool)? TestResults, ReviewInfo Review)> RunReviewGateAsync(
+        LoopAgent agent,
+        IReadOnlyList<Resource> resources,
+        Guid runId,
+        IAgentExecutor executor,
+        AgentExecutionOutcome outcome,
+        (string ResultsJson, bool AllPassed)? testResults,
+        RunLogWriter log,
+        CancellationToken cancellationToken)
+    {
+        var reviewers = resources
+            .Where(r => r.Type == ResourceType.Reviewer)
+            .Select(r => (Resource: r, Config: ResourceConfig.Parse<ReviewerConfig>(r)))
+            .Where(r => !string.IsNullOrWhiteSpace(r.Config.Rubric))
+            .ToList();
+
+        var none = new ReviewInfo(null, 0, null, null);
+        if (reviewers.Count == 0 || !outcome.Success) return (outcome, testResults, none);
+        if (testResults is { AllPassed: false }) return (outcome, testResults, none); // testing gate already failed
+
+        if (agent.DryRun)
+        {
+            var simulated = reviewers.Select(r => new ReviewRound(0, r.Resource.Name, "pass",
+                "[dry run] Review simulated — no tokens spent.", null, 0)).ToList();
+            foreach (var r in reviewers)
+            {
+                await log("info", $"[dry run] Review '{r.Resource.Name}' simulated: PASS.");
+            }
+            return (outcome, testResults, new ReviewInfo(true, 0, SerializeRounds(simulated), null));
+        }
+
+        var (workingDirectory, additionalDirectories) = AgentWorkspace.Resolve(agent, resources);
+        var maxFixRounds = Math.Max(0, reviewers.Max(r => r.Config.MaxFixRounds));
+        var rounds = new List<ReviewRound>();
+        var fixRoundsUsed = 0;
+
+        for (var round = 0; ; round++)
+        {
+            var failures = new List<(string Reviewer, ReviewVerdict Verdict)>();
+            var reviewCost = 0m;
+            foreach (var (resource, config) in reviewers)
+            {
+                var verdict = await reviewRunner.ReviewAsync(
+                    agent, resource, config, workingDirectory, additionalDirectories,
+                    outcome.ResultText, log, cancellationToken);
+                reviewCost += verdict.CostUsd;
+                rounds.Add(new ReviewRound(round, resource.Name,
+                    verdict.Inconclusive ? "inconclusive" : verdict.Pass ? "pass" : "fail",
+                    verdict.Summary, verdict.FixInstructions, verdict.CostUsd));
+                if (!verdict.Pass) failures.Add((resource.Name, verdict));
+            }
+            outcome = outcome with { CostUsd = outcome.CostUsd + reviewCost };
+
+            if (failures.Count == 0)
+            {
+                if (round > 0) await log("info", $"Review passed after {round} fix round(s).");
+                return (outcome, testResults, new ReviewInfo(true, fixRoundsUsed, SerializeRounds(rounds), null));
+            }
+
+            if (round >= maxFixRounds)
+            {
+                var summary = string.Join(" | ", failures.Select(f => $"{f.Reviewer}: {f.Verdict.Summary}"));
+                await log("error", $"Review failed after {fixRoundsUsed} fix round(s); giving up.");
+                var escalate = reviewers.Any(r => r.Config.EscalateOnFail)
+                    ? $"Review failed after {fixRoundsUsed} fix round(s): {Truncate(summary, 800)}"
+                    : null;
+                var failed = outcome with
+                {
+                    Success = false,
+                    ErrorMessage = Truncate($"Failed review after {fixRoundsUsed} fix round(s). {summary}", 4000),
+                };
+                return (failed, testResults, new ReviewInfo(false, fixRoundsUsed, SerializeRounds(rounds), escalate));
+            }
+
+            // Fix round: hand the combined instructions back to the worker.
+            fixRoundsUsed++;
+            var instructions = string.Join("\n\n", failures.Select(f =>
+                $"From reviewer '{f.Reviewer}':\n{f.Verdict.FixInstructions ?? f.Verdict.Summary}"));
+            await log("info", $"Fix round {fixRoundsUsed}/{maxFixRounds}: re-running the worker with the reviewer's instructions.");
+
+            var fixOutcome = await executor.ExecuteAsync(
+                new AgentExecutionContext(agent, resources, runId, instructions), log, cancellationToken);
+            outcome = new AgentExecutionOutcome(
+                fixOutcome.Success,
+                fixOutcome.ResultText ?? outcome.ResultText,
+                fixOutcome.ErrorMessage,
+                outcome.CostUsd + fixOutcome.CostUsd,
+                outcome.InputTokens + fixOutcome.InputTokens,
+                outcome.OutputTokens + fixOutcome.OutputTokens,
+                outcome.CacheReadTokens + fixOutcome.CacheReadTokens,
+                outcome.CacheCreationTokens + fixOutcome.CacheCreationTokens,
+                outcome.NumTurns + fixOutcome.NumTurns,
+                outcome.DurationMs + fixOutcome.DurationMs);
+
+            if (!fixOutcome.Success)
+            {
+                await log("error", "The fix round itself failed; review cannot pass.");
+                return (outcome, testResults,
+                    new ReviewInfo(false, fixRoundsUsed, SerializeRounds(rounds),
+                        reviewers.Any(r => r.Config.EscalateOnFail) ? "Review fix round failed to execute." : null));
+            }
+
+            // A revision can break what the testing gate had already accepted — re-gate it.
+            testResults = await testingActionRunner.RunAllAsync(agent, resources, log, cancellationToken);
+            if (testResults is { AllPassed: false })
+            {
+                await log("error", "Testing actions failed on the revised work; review cannot pass.");
+                return (outcome, testResults,
+                    new ReviewInfo(false, fixRoundsUsed, SerializeRounds(rounds),
+                        reviewers.Any(r => r.Config.EscalateOnFail) ? "Review fix round broke the testing gate." : null));
+            }
+        }
+    }
+
+    private static string SerializeRounds(List<ReviewRound> rounds) =>
+        System.Text.Json.JsonSerializer.Serialize(rounds, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+
+    private static string Truncate(string value, int max) =>
+        value.Length <= max ? value : value[..max] + "…";
+
     private async Task FinalizeAsync(Guid runId, Guid agentId, AgentExecutionOutcome outcome,
-        (string ResultsJson, bool AllPassed)? testResults)
+        (string ResultsJson, bool AllPassed)? testResults, ReviewInfo review)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var run = await db.Runs.FindAsync(runId);
@@ -184,6 +348,14 @@ public sealed class AgentRunCoordinator(
         {
             run.TestResultsJson = tests.ResultsJson;
             run.TestsPassed = tests.AllPassed;
+        }
+        run.ReviewPassed = review.Passed;
+        run.ReviewRounds = review.FixRounds;
+        run.ReviewJson = review.Json;
+        if (review.EscalationReason is not null)
+        {
+            run.Escalated = true;
+            run.EscalationReason = review.EscalationReason;
         }
 
         await db.Agents.Where(a => a.Id == agentId)

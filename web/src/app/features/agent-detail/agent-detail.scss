@@ -67,6 +67,65 @@
   color: var(--text-3);
 }
 
+/* ---------- Waiting-on-you panel (open User Action Requests) ---------- */
+
+.user-actions-card {
+  background: var(--amber-soft);
+  border-left: 3px solid var(--amber);
+  margin-bottom: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.user-actions-heading {
+  font-size: 17px;
+  color: var(--amber);
+}
+
+.user-action {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.user-action + .user-action {
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+}
+
+.user-action-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.user-action-title {
+  font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.user-action-raised {
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.user-action-details {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.user-action-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 /* ---------- Runs table ---------- */
 
 .runs-card { padding: 22px 24px 12px; }
@@ -81,6 +140,9 @@
 table.data tbody tr.selected { background: var(--accent-soft); }
 
 .escalated-chip { margin-left: 6px; }
+
+/* Run raised a User Action Request — mirrors the escalated-chip beside the status. */
+.action-chip { margin-left: 6px; }
 
 .test-pass { color: var(--green); font-weight: 700; }
 .test-fail { color: var(--red); font-weight: 700; }
@@ -327,5 +389,53 @@ table.data tbody tr.selected { background: var(--accent-soft); }
 /* Long unbroken agent names wrap instead of overflowing the header. */
 .page-header h1 {
   min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Review gate: rounds in the drawer, fix-round count beside the table tick */
+.review-rounds {
+  font-size: 10px;
+  color: var(--text-3);
+  margin-left: 2px;
+  vertical-align: super;
+}
+
+.review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.review-round {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.review-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.review-reviewer { font-weight: 600; }
+
+.review-summary {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.review-fix {
+  margin: 0;
+  padding: 10px;
+  background: var(--amber-soft);
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

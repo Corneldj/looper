@@ -43,6 +43,12 @@ public sealed class AgentSchedulerService(
         {
             if (coordinator.IsRunning(agent.Id)) continue;
 
+            // Parked on a human: an open blocking User Action Request holds the loop, without failing it.
+            if (await Features.UserActions.UserActionGate.IsBlockedAsync(db, agent.Id, cancellationToken))
+            {
+                continue;
+            }
+
             var runId = await coordinator.TriggerRunAsync(agent.Id, RunTrigger.Scheduled, cancellationToken);
             if (runId is null) continue;
 

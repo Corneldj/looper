@@ -5,7 +5,11 @@ namespace Looper.Api.Infrastructure.Execution;
 public sealed record AgentExecutionContext(
     LoopAgent Agent,
     IReadOnlyList<Resource> Resources,
-    Guid RunId);
+    Guid RunId,
+    /// <summary>Set on review fix rounds: the reviewer's instructions appended to the loop prompt.</summary>
+    string? FixInstructions = null,
+    /// <summary>The user's answers to resolved action requests, delivered once on the next run.</summary>
+    string? UserResponses = null);
 
 public sealed record AgentExecutionOutcome(
     bool Success,

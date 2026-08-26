@@ -1,0 +1,68 @@
+<div class="modal-backdrop">
+  <div class="modal workspaces-modal">
+    <div class="modal-header">
+      <div>
+        <h2>🗂️ {{ pool().name }}</h2>
+        <p class="modal-sub">Workspaces claimed from this pool — one per unit of work.</p>
+      </div>
+      <button class="icon-btn" title="Close" (click)="close()">✕</button>
+    </div>
+
+    @if (error(); as message) {
+      <p class="ws-error">{{ message }}</p>
+    }
+
+    @if (!loaded()) {
+      <p class="ws-note">Loading…</p>
+    } @else if (workspaces().length === 0) {
+      <div class="empty-state">
+        <div class="glyph">🗂️</div>
+        <h3>No workspaces yet</h3>
+        <p>Agents claim one automatically when they start a unit of work — the protocol is injected into every real run.</p>
+      </div>
+    } @else {
+      <div class="ws-list">
+        @for (workspace of workspaces(); track workspace.id) {
+          <div class="ws-row">
+            <div class="ws-main">
+              <div class="ws-title">
+                <span [class]="'chip ' + (workspace.status === 'Active' ? 'chip-green' : workspace.status === 'Done' ? 'chip-neutral' : 'chip-amber')">
+                  {{ workspace.status }}
+                </span>
+                <span class="ws-unit">{{ workspace.unit }}</span>
+                @if (workspace.agentName) {
+                  <span class="ws-agent">by {{ workspace.agentName }}</span>
+                }
+              </div>
+              <div class="ws-path mono" [title]="workspace.path">{{ workspace.path }}</div>
+              @if (workspace.contextBrief) {
+                <div class="ws-brief" [title]="workspace.contextBrief">{{ workspace.contextBrief }}</div>
+              }
+              <div class="ws-times">
+                created {{ relativeTime(workspace.createdAtUtc) }} · last used {{ relativeTime(workspace.lastUsedAtUtc) }}
+                @if (workspace.doneAtUtc) {
+                  · done {{ relativeTime(workspace.doneAtUtc) }}
+                }
+              </div>
+            </div>
+            <div class="ws-actions">
+              @if (workspace.status === 'Active') {
+                <button class="btn btn-ghost btn-sm" [disabled]="busyId() === workspace.id" (click)="markDone(workspace)">
+                  Mark done
+                </button>
+              }
+              <button class="btn btn-danger btn-sm" [disabled]="busyId() === workspace.id" (click)="clean(workspace)">
+                Clean
+              </button>
+            </div>
+          </div>
+        }
+      </div>
+    }
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" (click)="reload()">Refresh</button>
+      <button class="btn btn-primary" (click)="close()">Close</button>
+    </div>
+  </div>
+</div>

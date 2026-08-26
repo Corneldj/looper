@@ -11,6 +11,29 @@ public enum ResourceType
     AzureConnection,
     PatToken,
 
+    /// <summary>
+    /// An independent model-based review gate: after the worker succeeds (and testing actions pass),
+    /// a fresh-context reviewer judges the work against a rubric, and failures loop fix instructions
+    /// back to the worker. Deliberately NOT a sub-agent — the worker must not control its own gate.
+    /// </summary>
+    Reviewer,
+
+    /// <summary>A managed collection of rules with per-rule toggles; enabled rules join the system prompt.</summary>
+    RuleSet,
+
+    /// <summary>
+    /// A pool of dynamic workspaces: agents claim a dedicated directory per unit of work
+    /// (blank, git clone, or template copy), seeded with a context brief and cleaned up
+    /// automatically after the retention window.
+    /// </summary>
+    WorkspacePool,
+
+    /// <summary>
+    /// Lets the agent raise a User Action Request: something only the human can do or decide.
+    /// Raising one is not a failure — the run succeeds and the schedule parks until resolved.
+    /// </summary>
+    UserAction,
+
     /// <summary>A dynamically generated resource type; the concrete kind lives in <see cref="Resource.CustomTypeKey"/>.</summary>
     Custom
 }

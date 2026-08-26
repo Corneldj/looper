@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { EMPTY, Subject, catchError, forkJoin, merge, of, switchMap, takeWhile, timer } from 'rxjs';
 import { ApiService } from '../../core/api.service';
+import { UserActionsStore } from '../../core/stores';
 import {
   AgentDetailDto,
   AUTONOMY_LEVELS,
@@ -12,6 +13,7 @@ import {
   RunDetailDto,
   RunStatus,
   RunSummaryDto,
+  UserActionDto,
 } from '../../core/models';
 import {
   formatCost,
@@ -35,6 +37,7 @@ export class AgentDetail {
   readonly id = input.required<string>();
 
   private readonly api = inject(ApiService);
+  protected readonly userActionsStore = inject(UserActionsStore);
 
   /** Emits to trigger an immediate refresh outside the 5s cadence (after Run now / Cancel). */
   private readonly refresh$ = new Subject<void>();
@@ -50,6 +53,11 @@ export class AgentDetail {
   protected readonly runDetailError = signal(false);
 
   protected readonly actionBusy = signal(false);
+
+  /** Id of the User Action Request currently being resolved (busy state on its button). */
+  protected readonly resolvingActionId = signal<string | null>(null);
+  /** Response drafts per request id — plain map; the textareas keep their own DOM state. */
+  private readonly actionResponses = new Map<string, string>();
 
   // Shared formatters exposed to the template.
   protected readonly formatCost = formatCost;
@@ -151,6 +159,25 @@ export class AgentDetail {
         this.refresh$.next();
       },
       error: () => this.actionBusy.set(false),
+    });
+  }
+
+  protected onActionResponseInput(requestId: string, event: Event): void {
+    this.actionResponses.set(requestId, (event.target as HTMLTextAreaElement).value);
+  }
+
+  protected resolveAction(request: UserActionDto): void {
+    if (this.resolvingActionId() !== null) return;
+    this.resolvingActionId.set(request.id);
+    const response = this.actionResponses.get(request.id)?.trim();
+    this.api.resolveUserAction(request.id, response || undefined).subscribe({
+      next: () => {
+        this.resolvingActionId.set(null);
+        this.actionResponses.delete(request.id);
+        this.userActionsStore.refreshNow();
+        this.refresh$.next();
+      },
+      error: () => this.resolvingActionId.set(null),
     });
   }
 

@@ -40,6 +40,9 @@ builder.Services.Decorate(typeof(IQueryHandler<,>), typeof(LoggingQueryHandlerDe
 builder.Services.AddSingleton<ClaudeCliExecutor>();
 builder.Services.AddSingleton<SimulatedAgentExecutor>();
 builder.Services.AddSingleton<TestingActionRunner>();
+builder.Services.AddSingleton<ReviewRunner>();
+builder.Services.AddSingleton<Looper.Api.Infrastructure.Workspaces.WorkspaceProvisioner>();
+builder.Services.AddHostedService<Looper.Api.Infrastructure.Workspaces.WorkspaceJanitorService>();
 builder.Services.AddSingleton<AgentRunCoordinator>();
 builder.Services.AddSingleton<ClaudeCliStatusService>();
 builder.Services.AddHostedService<AgentSchedulerService>();

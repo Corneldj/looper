@@ -1,0 +1,83 @@
+.workspaces-modal {
+  max-width: 680px;
+}
+
+.modal-sub {
+  font-size: 12.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+.ws-note {
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.ws-error {
+  color: var(--red);
+  background: var(--red-soft);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 12.5px;
+}
+
+.ws-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 52vh;
+  overflow-y: auto;
+}
+
+.ws-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+}
+
+.ws-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ws-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ws-unit { font-weight: 700; font-size: 13.5px; }
+.ws-agent { font-size: 12px; color: var(--text-3); }
+
+.ws-path {
+  font-size: 11.5px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-brief {
+  font-size: 12px;
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-times {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.ws-actions {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}

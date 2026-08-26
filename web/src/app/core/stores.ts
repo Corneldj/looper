@@ -2,7 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { catchError, of, timer, switchMap } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService } from './api.service';
-import { AgentSummaryDto, ClaudeStatusDto, RESOURCE_TYPES, ResourceDto, ResourceTypeDto } from './models';
+import { AgentSummaryDto, ClaudeStatusDto, RESOURCE_TYPES, ResourceDto, ResourceTypeDto, UserActionDto } from './models';
 
 /** Holds the resource list shared by the workbench panels and agent editor. */
 @Injectable({ providedIn: 'root' })
@@ -176,5 +176,46 @@ export class ClaudeStatusStore {
         this.installError.set('The installer couldn’t be started — is the API running?');
       },
     });
+  }
+}
+
+/**
+ * Polls open User Action Requests so "waiting on you" surfaces everywhere:
+ * the topbar, the agent cards, and the agent detail panel.
+ */
+@Injectable({ providedIn: 'root' })
+export class UserActionsStore {
+  private readonly api = inject(ApiService);
+
+  readonly open = signal<UserActionDto[]>([]);
+  readonly loaded = signal(false);
+
+  readonly openCount = computed(() => this.open().length);
+
+  constructor() {
+    timer(0, 10_000)
+      .pipe(
+        switchMap(() => this.api.getUserActions().pipe(catchError(() => of(null)))),
+        takeUntilDestroyed(),
+      )
+      .subscribe(list => {
+        if (list === null) return;
+        this.open.set(list);
+        this.loaded.set(true);
+      });
+  }
+
+  refreshNow(): void {
+    this.api.getUserActions().subscribe({
+      next: list => {
+        this.open.set(list);
+        this.loaded.set(true);
+      },
+      error: () => {},
+    });
+  }
+
+  forAgent(agentId: string): UserActionDto[] {
+    return this.open().filter(r => r.agentId === agentId);
   }
 }

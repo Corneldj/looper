@@ -70,6 +70,39 @@
       </div>
     </div>
 
+    @if (userActionsStore.forAgent(a.id).length > 0) {
+      <section class="card user-actions-card">
+        <h2 class="user-actions-heading">🙋 Waiting on you</h2>
+        @for (request of userActionsStore.forAgent(a.id); track request.id) {
+          <div class="user-action">
+            <div class="user-action-head">
+              <span class="user-action-title">{{ request.title }}</span>
+              <span class="user-action-raised">raised {{ relativeTime(request.createdAtUtc) }}</span>
+            </div>
+            @if (request.details) {
+              <p class="user-action-details">{{ request.details }}</p>
+            }
+            <textarea
+              class="textarea"
+              rows="3"
+              placeholder="Your answer — it reaches the agent's next run…"
+              (input)="onActionResponseInput(request.id, $event)"
+            ></textarea>
+            <div class="user-action-actions">
+              <button
+                type="button"
+                class="btn btn-primary"
+                [disabled]="resolvingActionId() !== null"
+                (click)="resolveAction(request)"
+              >
+                {{ resolvingActionId() === request.id ? 'Resolving…' : 'Resolve & continue' }}
+              </button>
+            </div>
+          </div>
+        }
+      </section>
+    }
+
     <section class="card runs-card">
       <div class="runs-head">
         <h2>Run history</h2>
@@ -97,6 +130,7 @@
                 <th>Tokens</th>
                 <th>Cost</th>
                 <th>Tests</th>
+                <th>Review</th>
               </tr>
             </thead>
             <tbody>
@@ -114,6 +148,9 @@
                     @if (run.escalated) {
                       <span class="chip chip-amber escalated-chip">⚑ escalated</span>
                     }
+                    @if (run.actionRequested) {
+                      <span class="chip chip-amber action-chip" title="Raised a user action request">🙋</span>
+                    }
                   </td>
                   <td class="num">{{ run.status === 'Running' ? '…' : formatDuration(run.durationMs) }}</td>
                   <td class="num">{{ run.numTurns }}</td>
@@ -124,6 +161,15 @@
                       <span class="test-pass">✓</span>
                     } @else if (run.testsPassed === false) {
                       <span class="test-fail">✗</span>
+                    } @else {
+                      <span class="dim">—</span>
+                    }
+                  </td>
+                  <td>
+                    @if (run.reviewPassed === true) {
+                      <span class="test-pass" [title]="run.reviewRounds === 0 ? 'Passed review first-pass' : 'Passed after ' + run.reviewRounds + ' fix round(s)'">✓@if (run.reviewRounds > 0) {<span class="review-rounds">{{ run.reviewRounds }}</span>}</span>
+                    } @else if (run.reviewPassed === false) {
+                      <span class="test-fail" [title]="'Failed review after ' + run.reviewRounds + ' fix round(s)'">✗</span>
                     } @else {
                       <span class="dim">—</span>
                     }
@@ -217,6 +263,29 @@
               <p class="dim">{{ run.status === 'Running' ? 'The loop is still running…' : 'No result text was produced.' }}</p>
             }
           </section>
+
+          @if (run.reviews && run.reviews.length > 0) {
+            <section class="drawer-section">
+              <span class="section-label">Review</span>
+              <div class="review-list">
+                @for (review of run.reviews; track $index) {
+                  <div class="review-round">
+                    <div class="review-head">
+                      <span [class]="'chip ' + (review.verdict === 'pass' ? 'chip-green' : review.verdict === 'fail' ? 'chip-red' : 'chip-amber')">
+                        {{ review.verdict }}
+                      </span>
+                      <span class="review-reviewer">{{ review.reviewer }}</span>
+                      <span class="dim">round {{ review.round + 1 }}</span>
+                    </div>
+                    <p class="review-summary">{{ review.summary }}</p>
+                    @if (review.fixInstructions) {
+                      <pre class="review-fix">{{ review.fixInstructions }}</pre>
+                    }
+                  </div>
+                }
+              </div>
+            </section>
+          }
 
           @if (run.testResults && run.testResults.length > 0) {
             <section class="drawer-section">

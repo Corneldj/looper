@@ -4,10 +4,11 @@ import { ApiService } from '../../../core/api.service';
 import { ResourcesStore } from '../../../core/stores';
 import { GeneratedResourceTypeDto, ResourceDto, ResourceType, ResourceTypeDto } from '../../../core/models';
 import { ResourceEditor } from './resource-editor';
+import { WorkspacesModal } from './workspaces-modal';
 
 @Component({
   selector: 'app-resource-panel',
-  imports: [ResourceEditor, FormsModule],
+  imports: [ResourceEditor, FormsModule, WorkspacesModal],
   templateUrl: './resource-panel.html',
   styleUrl: './resource-panel.scss',
 })
@@ -24,6 +25,8 @@ export class ResourcePanel implements OnInit {
   /** The resource being edited, or null when creating. */
   readonly editing = signal<ResourceDto | null>(null);
   readonly error = signal<string | null>(null);
+  /** The WorkspacePool resource whose workspaces modal is open. */
+  readonly workspacesFor = signal<ResourceDto | null>(null);
 
   // ---------- "New type with AI" flow ----------
   readonly aiOpen = signal(false);

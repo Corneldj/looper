@@ -39,6 +39,7 @@ public sealed class AgentRunCoordinatorTests : IDisposable
             new ClaudeCliExecutor(looperOptions, registry, NullLogger<ClaudeCliExecutor>.Instance),
             new SimulatedAgentExecutor(),
             new TestingActionRunner(looperOptions),
+            new ReviewRunner(looperOptions, NullLogger<ReviewRunner>.Instance),
             looperOptions,
             NullLogger<AgentRunCoordinator>.Instance);
     }

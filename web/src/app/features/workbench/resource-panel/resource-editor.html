@@ -128,6 +128,41 @@
           </div>
         }
 
+        @case ('RuleSet') {
+          <div class="field">
+            <label>Rules</label>
+            <div class="ruleset-list">
+              @for (rule of setRules(); track $index) {
+                <div class="ruleset-row" [class.disabled]="!rule.enabled">
+                  <span class="switch rule-switch" [title]="rule.enabled ? 'Rule is active' : 'Rule is off'">
+                    <input
+                      type="checkbox"
+                      [checked]="rule.enabled"
+                      (change)="updateSetRule($index, { enabled: $any($event.target).checked })"
+                    />
+                    <span class="track"></span>
+                  </span>
+                  <input
+                    class="input rule-input"
+                    [ngModel]="rule.text"
+                    (ngModelChange)="updateSetRule($index, { text: $event })"
+                    placeholder="e.g. Never push directly to main."
+                  />
+                  <button
+                    type="button"
+                    class="icon-btn rule-remove"
+                    title="Remove rule"
+                    [disabled]="setRules().length === 1"
+                    (click)="removeSetRule($index)"
+                  >✕</button>
+                </div>
+              }
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm add-rule" (click)="addSetRule()">+ Add rule</button>
+            <span class="hint">Enabled rules are appended to the agent’s system prompt, in order. Toggle one off to bench it without deleting it.</span>
+          </div>
+        }
+
         @case ('SubAgent') {
           <div class="field">
             <label>What it does</label>
@@ -158,6 +193,113 @@
               </select>
             </div>
           </div>
+        }
+
+        @case ('WorkspacePool') {
+          <div class="field">
+            <label>Workspaces root</label>
+            <div class="path-with-browse">
+              <input class="input mono" [(ngModel)]="poolRootPath" placeholder="/home/you/looper-workspaces" />
+              <button type="button" class="btn btn-ghost" (click)="openPoolPicker('root')">Browse…</button>
+            </div>
+            <span class="hint">Each unit of work gets its own directory under this root, seeded with a WORKBRIEF.md carrying the context.</span>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label>Provisioning</label>
+              <select class="select" [(ngModel)]="poolProvisioning">
+                <option value="blank">Blank — empty directory</option>
+                <option value="git-clone">Git clone — fresh shallow clone per unit</option>
+                <option value="copy-template">Copy template — duplicate a folder per unit</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Retention (days)</label>
+              <input class="input num" type="number" min="0" [(ngModel)]="poolRetentionDays" />
+              <span class="hint">Done workspaces are removed after this many days.</span>
+            </div>
+          </div>
+          @if (poolProvisioning() === 'git-clone') {
+            <div class="field">
+              <label>Repository</label>
+              <input class="input mono" [(ngModel)]="poolSource" placeholder="https://github.com/you/repo.git" />
+            </div>
+          } @else if (poolProvisioning() === 'copy-template') {
+            <div class="field">
+              <label>Template folder</label>
+              <div class="path-with-browse">
+                <input class="input mono" [(ngModel)]="poolSource" placeholder="/home/you/templates/service" />
+                <button type="button" class="btn btn-ghost" (click)="openPoolPicker('source')">Browse…</button>
+              </div>
+            </div>
+          }
+          <div class="field">
+            <label>Max workspaces <span class="optional">optional</span></label>
+            <input class="input num" type="number" min="1" [(ngModel)]="poolMaxWorkspaces" placeholder="unbounded" />
+            <span class="hint">Claims beyond the cap are refused until units are marked done and cleaned.</span>
+          </div>
+        }
+
+        @case ('UserAction') {
+          <div class="field">
+            <label>When should the agent ask? <span class="optional">optional</span></label>
+            <textarea
+              class="textarea"
+              rows="4"
+              [(ngModel)]="actionInstructions"
+              placeholder="e.g. If the requirements are ambiguous or contradictory, reject them and raise a request listing exactly what needs clarifying — do not guess."
+            ></textarea>
+            <span class="hint">Appended to the agent’s protocol. Raising a request is never a failure — the run finishes cleanly and the loop waits for you.</span>
+          </div>
+          <label class="switch-row">
+            <span class="switch">
+              <input type="checkbox" [(ngModel)]="actionBlocking" />
+              <span class="track"></span>
+            </span>
+            <span class="switch-text">
+              Park the schedule until resolved
+              <span class="switch-hint">Off = requests are informational; the loop keeps running.</span>
+            </span>
+          </label>
+        }
+
+        @case ('Reviewer') {
+          <div class="field">
+            <label>Review rubric</label>
+            <textarea
+              class="textarea"
+              rows="5"
+              [(ngModel)]="rubric"
+              placeholder="What must be true for the work to pass? e.g. All new code has tests; no TODOs left behind; the change matches the task, nothing more."
+            ></textarea>
+            <span class="hint">The reviewer inspects the working directory with read-only tools and judges against this. Failing verdicts send fix instructions back to the agent.</span>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label>Reviewer model</label>
+              <select class="select" [(ngModel)]="reviewerModel">
+                <option value="">Same as the agent</option>
+                @for (model of models; track model.id) {
+                  <option [value]="model.id">{{ model.label }}</option>
+                }
+              </select>
+            </div>
+            <div class="field">
+              <label>Max fix rounds</label>
+              <input class="input num" type="number" min="0" max="5" [(ngModel)]="maxFixRounds" />
+              <span class="hint">Fix-and-re-review cycles before the run fails review.</span>
+            </div>
+          </div>
+          <label class="switch-row">
+            <span class="switch">
+              <input type="checkbox" [(ngModel)]="escalateOnFail" />
+              <span class="track"></span>
+            </span>
+            <span class="switch-text">
+              Escalate on final failure
+              <span class="switch-hint">Hand the run to a human when review can’t pass.</span>
+            </span>
+          </label>
         }
 
         @case ('AzureConnection') {
@@ -310,6 +452,13 @@
 
 @if (folderPickerOpen()) {
   <app-folder-picker [startPath]="path() || null" (picked)="onFolderPicked($event)" />
+}
+
+@if (poolPickerTarget()) {
+  <app-folder-picker
+    [startPath]="(poolPickerTarget() === 'root' ? poolRootPath() : poolSource()) || null"
+    (picked)="onPoolFolderPicked($event)"
+  />
 }
 
 @if (customPathFieldKey(); as fieldKey) {

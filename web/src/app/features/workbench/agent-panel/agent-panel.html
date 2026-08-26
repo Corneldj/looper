@@ -3,7 +3,10 @@
     <h2>Loop Agents</h2>
     <p class="subtitle">Agents that run on a schedule and report every iteration.</p>
   </div>
-  <button type="button" class="btn btn-primary" (click)="openCreate()">+ New agent</button>
+  <div class="header-actions">
+    <button type="button" class="btn btn-soft" (click)="architectOpen.set(true)">✨ Architect</button>
+    <button type="button" class="btn btn-primary" (click)="openCreate()">+ New agent</button>
+  </div>
 </div>
 
 @if (!store.loaded()) {
@@ -33,6 +36,9 @@
         <div class="agent-top">
           <h3><a [routerLink]="['/agents', agent.id]">{{ agent.name }}</a></h3>
           <div class="agent-badges">
+            @if (openRequests(agent.id).length > 0) {
+              <span class="chip chip-amber" [title]="openRequests(agent.id)[0].title">🙋 waiting on you</span>
+            }
             @if (agent.dryRun) {
               <span class="chip chip-amber">Dry run</span>
             }
@@ -93,7 +99,13 @@
             <input type="checkbox" [checked]="agent.enabled" (change)="toggleEnabled(agent, $event)" />
             <span class="track"></span>
           </label>
-          <button type="button" class="btn btn-soft btn-sm" [disabled]="agent.isRunning" (click)="runNow(agent)">Run now</button>
+          <button
+            type="button"
+            class="btn btn-soft btn-sm"
+            [disabled]="agent.isRunning || hasBlockingRequest(agent.id)"
+            [title]="hasBlockingRequest(agent.id) ? 'Resolve the user action request first' : ''"
+            (click)="runNow(agent)"
+          >Run now</button>
           @if (agent.isRunning) {
             <button type="button" class="btn btn-danger btn-sm" (click)="cancelRun(agent)">Cancel</button>
           }
@@ -108,4 +120,8 @@
 
 @if (editorOpen()) {
   <app-agent-editor [agent]="editingAgent()" (closed)="onEditorClosed($event)" />
+}
+
+@if (architectOpen()) {
+  <app-architect-modal (closed)="architectOpen.set(false)" />
 }

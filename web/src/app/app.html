@@ -12,6 +12,9 @@
     </nav>
 
     <div class="topbar-status">
+      @if (userActionsStore.openCount() > 0) {
+        <span class="chip chip-amber">🙋 {{ userActionsStore.openCount() }} waiting on you</span>
+      }
       @if (!agentsStore.apiOnline()) {
         <span class="chip chip-red">API offline</span>
       } @else if (agentsStore.runningCount() > 0) {

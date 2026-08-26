@@ -11,6 +11,8 @@ public class LooperDbContext(DbContextOptions<LooperDbContext> options) : DbCont
     public DbSet<RunLogEntry> RunLogs => Set<RunLogEntry>();
     public DbSet<ResourceModuleRecord> ResourceModules => Set<ResourceModuleRecord>();
     public DbSet<AgentPullRequest> PullRequests => Set<AgentPullRequest>();
+    public DbSet<ManagedWorkspace> Workspaces => Set<ManagedWorkspace>();
+    public DbSet<UserActionRequest> UserActionRequests => Set<UserActionRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -32,6 +34,23 @@ public class LooperDbContext(DbContextOptions<LooperDbContext> options) : DbCont
             pr.HasIndex(p => p.Url);
             pr.HasIndex(p => p.Status);
             pr.HasOne(p => p.Agent).WithMany().HasForeignKey(p => p.AgentId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserActionRequest>(request =>
+        {
+            request.Property(r => r.Title).HasMaxLength(300);
+            request.Property(r => r.Status).HasConversion<string>().HasMaxLength(20);
+            request.HasIndex(r => new { r.AgentId, r.Status });
+            request.HasOne(r => r.Agent).WithMany().HasForeignKey(r => r.AgentId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ManagedWorkspace>(workspace =>
+        {
+            workspace.Property(w => w.Unit).HasMaxLength(120);
+            workspace.Property(w => w.Path).HasMaxLength(1024);
+            workspace.Property(w => w.Status).HasConversion<string>().HasMaxLength(20);
+            workspace.HasIndex(w => new { w.ResourceId, w.Status });
+            workspace.HasOne(w => w.Resource).WithMany().HasForeignKey(w => w.ResourceId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ResourceModuleRecord>(module =>

@@ -1,0 +1,102 @@
+<div class="modal-backdrop">
+  <div class="modal architect-modal">
+    <div class="modal-header">
+      <h2>✨ Architect</h2>
+      <button class="icon-btn" title="Close" [disabled]="busy()" (click)="close()">✕</button>
+    </div>
+
+    @if (result(); as result) {
+      @if (result.success) {
+        <p class="build-success">Workflow assembled — the architect composed and wired it from your pool.</p>
+      } @else {
+        <p class="error-strip">{{ result.error || 'The architect couldn’t finish the build.' }}</p>
+      }
+
+      @if (result.success || result.createdResources.length > 0 || result.createdAgents.length > 0) {
+        <div class="created-section">
+          <span class="section-label">Created resources</span>
+          @if (result.createdResources.length > 0) {
+            @for (item of result.createdResources; track item.id) {
+              <div class="created-row">
+                <span class="created-name">{{ item.name }}</span>
+                <span class="created-detail" [title]="item.detail">{{ item.detail }}</span>
+              </div>
+            }
+          } @else {
+            <p class="created-empty">nothing new — reused the pool</p>
+          }
+        </div>
+
+        <div class="created-section">
+          <span class="section-label">Created agents</span>
+          @if (result.createdAgents.length > 0) {
+            @for (item of result.createdAgents; track item.id) {
+              <div class="created-row">
+                <span class="created-name">{{ item.name }}</span>
+                <span class="created-detail" [title]="item.detail">{{ item.detail }}</span>
+              </div>
+            }
+          } @else {
+            <p class="created-empty">nothing new — reused the pool</p>
+          }
+        </div>
+      }
+
+      @if (result.costUsd > 0) {
+        <p class="hint">Build cost: ${{ result.costUsd.toFixed(4) }}</p>
+      }
+
+      @if (result.report) {
+        <div class="report">
+          <span class="section-label">Architect’s report</span>
+          <pre class="report-body">{{ result.report }}</pre>
+        </div>
+      }
+
+      @if (result.success) {
+        <p class="review-note">Review everything, fill in any placeholder credentials, then enable the agents when ready.</p>
+      }
+
+      <div class="modal-footer">
+        <button class="btn btn-primary" (click)="close()">Done</button>
+      </div>
+    } @else {
+      <p class="intro">
+        Describe the workflow — the architect composes it from your resource pool: reuses what fits,
+        creates what’s missing, and wires the agents. Everything it creates starts dry-run and paused
+        for your review.
+      </p>
+
+      <div class="field">
+        <label for="architect-description">What should the workflow do?</label>
+        <textarea
+          id="architect-description"
+          class="textarea"
+          rows="5"
+          [disabled]="busy()"
+          [(ngModel)]="description"
+          placeholder="e.g. A nightly loop that keeps the docs in sync with the repo, gated by the unit tests and an independent reviewer"
+        ></textarea>
+      </div>
+
+      @if (error(); as message) {
+        <p class="error-strip">{{ message }}</p>
+      }
+
+      <div class="modal-footer">
+        <button class="btn btn-ghost" [disabled]="busy()" (click)="close()">Cancel</button>
+        <button class="btn btn-primary" [disabled]="busy() || description().trim().length < 10" (click)="build()">
+          @if (busy()) {
+            <span class="pulse-dot"></span> The architect is building…
+          } @else {
+            Build workflow
+          }
+        </button>
+      </div>
+
+      @if (busy()) {
+        <p class="hint busy-wait">This takes a few minutes — resources and agents are composed and wired through the API.</p>
+      }
+    }
+  </div>
+</div>

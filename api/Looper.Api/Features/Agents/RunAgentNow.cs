@@ -19,6 +19,16 @@ public sealed class RunAgentNowHandler(LooperDbContext db, AgentRunCoordinator c
         var exists = await db.Agents.AnyAsync(a => a.Id == command.Id, cancellationToken);
         if (!exists) throw new NotFoundException("Agent", command.Id);
 
+        if (await Features.UserActions.UserActionGate.IsBlockedAsync(db, command.Id, cancellationToken))
+        {
+            var pending = await db.UserActionRequests
+                .Where(r => r.AgentId == command.Id && r.Status == Domain.UserActionStatus.Open && r.Blocking)
+                .Select(r => r.Title)
+                .FirstAsync(cancellationToken);
+            throw new FluentValidation.ValidationException(
+                $"This agent is waiting on you: \"{pending}\". Resolve the user action request first.");
+        }
+
         return await coordinator.TriggerRunAsync(command.Id, RunTrigger.Manual, cancellationToken);
     }
 }

@@ -48,6 +48,9 @@
             }
           </div>
           <div class="resource-actions">
+            @if (resource.type === 'WorkspacePool') {
+              <button class="icon-btn" title="Workspaces" (click)="workspacesFor.set(resource)">🗂️</button>
+            }
             <button class="icon-btn" title="Edit" (click)="edit(resource)">✏️</button>
             <button class="icon-btn" title="Delete" (click)="remove(resource)">🗑️</button>
           </div>
@@ -167,4 +170,8 @@
     [resource]="editing()"
     (closed)="onEditorClosed($event)"
   />
+}
+
+@if (workspacesFor(); as pool) {
+  <app-workspaces-modal [pool]="pool" (closed)="workspacesFor.set(null)" />
 }

@@ -33,7 +33,11 @@ public static class ResourceTypeCatalog
         new(nameof(ResourceType.Rag), "Knowledge (RAG)", "📚", "A knowledge source the agent is told to consult.", true, null),
         new(nameof(ResourceType.TestingAction), "Testing Action", "🧪", "A command that runs after every loop and gates the result.", true, null),
         new(nameof(ResourceType.Rule), "Rule", "📏", "Standing instructions appended to the agent's system prompt.", true, null),
+        new(nameof(ResourceType.RuleSet), "Rule Set", "📋", "A managed collection of rules — add, toggle and remove without the clutter.", true, null),
+        new(nameof(ResourceType.WorkspacePool), "Dynamic Workspaces", "🗂️", "Agents claim a dedicated workspace per unit of work — provisioned on demand, context passed in, cleaned up on retention.", true, null),
+        new(nameof(ResourceType.UserAction), "User Action Requests", "🙋", "The agent can ask you to do or decide something — the loop parks until you respond, without failing.", true, null),
         new(nameof(ResourceType.SubAgent), "Sub-agent", "🤖", "A helper agent the main agent can delegate to.", true, null),
+        new(nameof(ResourceType.Reviewer), "Reviewer", "🧐", "An independent agent that reviews the work after every loop — pass, or fail with fix instructions.", true, null),
         new(nameof(ResourceType.AzureConnection), "Azure Connection", "☁️", "Azure identity exposed as environment variables.", true, null),
         new(nameof(ResourceType.PatToken), "PAT Token", "🔑", "A personal access token injected as an environment variable.", true, null)
     ];

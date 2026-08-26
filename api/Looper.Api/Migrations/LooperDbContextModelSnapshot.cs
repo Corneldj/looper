@@ -132,6 +132,9 @@ namespace Looper.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("ActionRequested")
+                        .HasColumnType("INTEGER");
+
                     b.Property<Guid>("AgentId")
                         .HasColumnType("TEXT");
 
@@ -177,6 +180,15 @@ namespace Looper.Api.Migrations
 
                     b.Property<string>("ResultText")
                         .HasColumnType("TEXT");
+
+                    b.Property<string>("ReviewJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool?>("ReviewPassed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ReviewRounds")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("StartedAtUtc")
                         .HasColumnType("TEXT");
@@ -277,6 +289,59 @@ namespace Looper.Api.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Agents");
+                });
+
+            modelBuilder.Entity("Looper.Api.Domain.ManagedWorkspace", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("AgentId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("CleanedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ContextBrief")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DoneAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("LastUsedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("RunId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ResourceId", "Status");
+
+                    b.ToTable("Workspaces");
                 });
 
             modelBuilder.Entity("Looper.Api.Domain.Resource", b =>
@@ -396,6 +461,54 @@ namespace Looper.Api.Migrations
                     b.ToTable("RunLogs");
                 });
 
+            modelBuilder.Entity("Looper.Api.Domain.UserActionRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("AgentId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Blocking")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Details")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ResolvedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Response")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ResponseDeliveredAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("RunId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId", "Status");
+
+                    b.ToTable("UserActionRequests");
+                });
+
             modelBuilder.Entity("LoopAgentResource", b =>
                 {
                     b.HasOne("Looper.Api.Domain.LoopAgent", null)
@@ -433,6 +546,17 @@ namespace Looper.Api.Migrations
                     b.Navigation("Agent");
                 });
 
+            modelBuilder.Entity("Looper.Api.Domain.ManagedWorkspace", b =>
+                {
+                    b.HasOne("Looper.Api.Domain.Resource", "Resource")
+                        .WithMany()
+                        .HasForeignKey("ResourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Resource");
+                });
+
             modelBuilder.Entity("Looper.Api.Domain.RunLogEntry", b =>
                 {
                     b.HasOne("Looper.Api.Domain.AgentRun", "Run")
@@ -442,6 +566,17 @@ namespace Looper.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Run");
+                });
+
+            modelBuilder.Entity("Looper.Api.Domain.UserActionRequest", b =>
+                {
+                    b.HasOne("Looper.Api.Domain.LoopAgent", "Agent")
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Agent");
                 });
 
             modelBuilder.Entity("Looper.Api.Domain.AgentRun", b =>
