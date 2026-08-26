@@ -3,7 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../../../core/api.service';
 import { AgentsStore } from '../../../core/stores';
-import { AgentDetailDto, AgentSummaryDto, EFFORT_LEVELS, EffortLevel, RunStatus } from '../../../core/models';
+import { AgentDetailDto, AgentSummaryDto, AUTONOMY_LEVELS, EFFORT_LEVELS, EffortLevel, RunStatus } from '../../../core/models';
 import { formatCost, formatInterval, modelShortName, relativeTime } from '../../../core/format';
 import { AgentEditor } from './agent-editor';
 
@@ -29,6 +29,10 @@ export class AgentPanel {
 
   protected effortLabel(effort: EffortLevel): string {
     return EFFORT_LEVELS.find(level => level.id === effort)?.label ?? effort;
+  }
+
+  protected autonomyBlurb(level: number): string {
+    return AUTONOMY_LEVELS.find(l => l.level === level)?.blurb ?? '';
   }
 
   protected statusChipClass(status: RunStatus): string {

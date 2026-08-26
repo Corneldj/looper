@@ -10,6 +10,7 @@ public class LooperDbContext(DbContextOptions<LooperDbContext> options) : DbCont
     public DbSet<AgentRun> Runs => Set<AgentRun>();
     public DbSet<RunLogEntry> RunLogs => Set<RunLogEntry>();
     public DbSet<ResourceModuleRecord> ResourceModules => Set<ResourceModuleRecord>();
+    public DbSet<AgentPullRequest> PullRequests => Set<AgentPullRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -19,6 +20,18 @@ public class LooperDbContext(DbContextOptions<LooperDbContext> options) : DbCont
             resource.Property(r => r.Type).HasConversion<string>().HasMaxLength(40);
             resource.Property(r => r.CustomTypeKey).HasMaxLength(100);
             resource.HasIndex(r => r.Type);
+        });
+
+        modelBuilder.Entity<AgentPullRequest>(pr =>
+        {
+            pr.Property(p => p.Title).HasMaxLength(300);
+            pr.Property(p => p.Url).HasMaxLength(600);
+            pr.Property(p => p.Repository).HasMaxLength(300);
+            pr.Property(p => p.Status).HasConversion<string>().HasMaxLength(20);
+            pr.Property(p => p.MergeCommitSha).HasMaxLength(64);
+            pr.HasIndex(p => p.Url);
+            pr.HasIndex(p => p.Status);
+            pr.HasOne(p => p.Agent).WithMany().HasForeignKey(p => p.AgentId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ResourceModuleRecord>(module =>

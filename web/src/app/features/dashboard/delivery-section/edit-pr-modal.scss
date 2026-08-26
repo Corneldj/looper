@@ -1,0 +1,28 @@
+.modal {
+  max-width: 560px;
+}
+
+.modal-blurb {
+  color: var(--text-3);
+  font-size: 12.5px;
+  margin-top: -10px;
+}
+
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.optional {
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.save-error {
+  font-size: 12.5px;
+  color: var(--red);
+  background: var(--red-soft);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+}

@@ -35,7 +35,7 @@ export interface ResourceDto {
 
 // ---------- Dynamic resource types ----------
 
-export type ResourceFieldKind = 'Text' | 'Multiline' | 'Number' | 'Boolean' | 'Password' | 'Select';
+export type ResourceFieldKind = 'Text' | 'Multiline' | 'Number' | 'Boolean' | 'Password' | 'Select' | 'Path';
 
 export interface ResourceFieldDto {
   key: string;
@@ -109,6 +109,8 @@ export interface AgentSummaryDto {
   intervalMinutes: number;
   enabled: boolean;
   dryRun: boolean;
+  /** 1 proposes · 2 sandboxed+approval · 3 autonomous+review · 4 autonomous+sampled audits. */
+  autonomyLevel: number;
   isRunning: boolean;
   resourceCount: number;
   lastRunAtUtc: string | null;
@@ -142,6 +144,7 @@ export interface SaveAgentRequest {
   allowedTools: string | null;
   bypassPermissions: boolean;
   dryRun: boolean;
+  autonomyLevel: number;
   resourceIds: string[];
 }
 
@@ -152,6 +155,7 @@ export interface RunSummaryDto {
   completedAtUtc: string | null;
   status: RunStatus;
   trigger: RunTrigger;
+  escalated: boolean;
   costUsd: number;
   inputTokens: number;
   outputTokens: number;
@@ -179,6 +183,7 @@ export interface TestingActionResultDto {
 
 export interface RunDetailDto extends RunSummaryDto {
   agentName: string;
+  escalationReason: string | null;
   cacheCreationTokens: number;
   resultText: string | null;
   testResults: TestingActionResultDto[] | null;
@@ -268,3 +273,93 @@ export const EFFORT_LEVELS: { id: EffortLevel; label: string }[] = [
 export function resourceTypeMeta(type: ResourceType) {
   return RESOURCE_TYPES.find(t => t.type === type) ?? RESOURCE_TYPES[0];
 }
+
+// ---------- Delivery: the metrics that measure value that stuck ----------
+
+export type PrStatus = 'Open' | 'Merged' | 'Closed';
+
+export interface PullRequestDto {
+  id: string;
+  agentId: string;
+  agentName: string;
+  runId: string | null;
+  title: string;
+  url: string | null;
+  repository: string;
+  number: number | null;
+  status: PrStatus;
+  openedAtUtc: string;
+  mergedAtUtc: string | null;
+  closedAtUtc: string | null;
+  additions: number;
+  deletions: number;
+  reviewRounds: number;
+  reviewComments: number;
+  humanCommits: number;
+  /** Merged with zero change-request rounds and zero human commits; null until merged. */
+  firstPass: boolean | null;
+  repoPath: string | null;
+  mergeCommitSha: string | null;
+  survivalRate: number | null;
+  survivalCheckedAtUtc: string | null;
+  lastSyncedAtUtc: string | null;
+  syncError: string | null;
+}
+
+export interface RegisterPrBody {
+  runId?: string | null;
+  agentId?: string | null;
+  url?: string | null;
+  title?: string | null;
+  repoPath?: string | null;
+  repository?: string | null;
+}
+
+export interface UpdatePrBody {
+  title: string;
+  status: PrStatus;
+  additions: number;
+  deletions: number;
+  reviewRounds: number;
+  reviewComments: number;
+  humanCommits: number;
+  repoPath: string | null;
+  mergeCommitSha: string | null;
+}
+
+export interface AgentDeliveryRowDto {
+  agentId: string;
+  name: string;
+  autonomyLevel: number;
+  mergedPrs: number;
+  costUsd: number;
+  costPerMergedPrUsd: number | null;
+  firstPassRate: number | null;
+  escalationRate: number | null;
+  completedRuns: number;
+  recommendation: 'promote' | 'demote' | 'hold' | null;
+}
+
+export interface DeliveryMetricsDto {
+  windowDays: number;
+  totalCostUsd: number;
+  mergedPrs: number;
+  openPrs: number;
+  closedPrs: number;
+  costPerMergedPrUsd: number | null;
+  firstPassRate: number | null;
+  codeSurvivalRate: number | null;
+  survivalCheckedPrs: number;
+  reviewChurnPer100Lines: number | null;
+  escalationRate: number | null;
+  escalatedRuns: number;
+  completedRuns: number;
+  agents: AgentDeliveryRowDto[];
+}
+
+export const AUTONOMY_LEVELS: { level: number; label: string; blurb: string }[] = [
+  { level: 1, label: 'L1 · Proposes', blurb: 'Suggests changes; a human executes them.' },
+  { level: 2, label: 'L2 · Sandboxed', blurb: 'Executes in a sandbox; a human approves the diff.' },
+  { level: 3, label: 'L3 · Autonomous', blurb: 'Executes autonomously; humans review after the fact.' },
+  { level: 4, label: 'L4 · Audited', blurb: 'Fully autonomous with sampled audits.' },
+];

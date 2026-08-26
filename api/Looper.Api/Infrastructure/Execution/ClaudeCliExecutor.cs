@@ -53,6 +53,12 @@ public sealed class ClaudeCliExecutor(
             }
         }
 
+        // The PRD-to-PR feedback channel: the run can report the PRs it ships and escalate
+        // to a human, which is what the delivery metrics are computed from.
+        startInfo.Environment["LOOPER_API_URL"] = options.Value.PublicUrl.TrimEnd('/');
+        startInfo.Environment["LOOPER_RUN_ID"] = context.RunId.ToString();
+        startInfo.Environment["LOOPER_AGENT_ID"] = agent.Id.ToString();
+
         await log("info", $"Launching Claude Agent SDK run: model={agent.Model}, effort={agent.Effort}, cwd={workingDirectory}");
         await log("info", $"claude {string.Join(' ', RedactedArguments(startInfo.ArgumentList, agent))}");
 
@@ -115,7 +121,9 @@ public sealed class ClaudeCliExecutor(
 
             try
             {
-                contributions.Add(module.Contribute(new ResourceModuleContext(resource.ConfigJson)));
+                var moduleContext = new ResourceModuleContext(resource.ConfigJson);
+                module.PrepareRun(moduleContext);
+                contributions.Add(module.Contribute(moduleContext));
             }
             catch (Exception ex)
             {
@@ -230,6 +238,15 @@ public sealed class ClaudeCliExecutor(
         return builder.ToString();
     }
 
+    /// <summary>Standing instructions for reporting shipped work and handing off — always present on real runs.</summary>
+    private const string DeliveryProtocol =
+        "Delivery reporting: when you open a pull request during this run, register it with Looper immediately: " +
+        "curl -s -X POST \"$LOOPER_API_URL/api/delivery/prs\" -H 'Content-Type: application/json' " +
+        "-d \"{\\\"runId\\\":\\\"$LOOPER_RUN_ID\\\",\\\"url\\\":\\\"<the PR url>\\\",\\\"title\\\":\\\"<the PR title>\\\",\\\"repoPath\\\":\\\"$PWD\\\"}\". " +
+        "If you are blocked on something only a human can decide or authorize, register an escalation and stop cleanly: " +
+        "curl -s -X POST \"$LOOPER_API_URL/api/runs/$LOOPER_RUN_ID/escalate\" -H 'Content-Type: application/json' " +
+        "-d \"{\\\"reason\\\":\\\"<one sentence on what you need>\\\"}\". Never invent a PR url; only report PRs you actually opened.";
+
     private static string? BuildAppendedSystemPrompt(IReadOnlyList<Resource> resources,
         IReadOnlyList<ResourceContribution> contributions)
     {
@@ -238,9 +255,10 @@ public sealed class ClaudeCliExecutor(
             .Select(r => ResourceConfig.Parse<RuleConfig>(r).Text)
             .Concat(contributions.SelectMany(c => c.SystemPromptRules))
             .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Append(DeliveryProtocol)
             .ToList();
 
-        return rules.Count == 0 ? null : string.Join("\n\n", rules);
+        return string.Join("\n\n", rules);
     }
 
     private static string? BuildMcpConfig(IReadOnlyList<Resource> resources,

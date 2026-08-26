@@ -6,6 +6,7 @@ import { EMPTY, Subject, catchError, forkJoin, merge, of, switchMap, takeWhile, 
 import { ApiService } from '../../core/api.service';
 import {
   AgentDetailDto,
+  AUTONOMY_LEVELS,
   EFFORT_LEVELS,
   EffortLevel,
   RunDetailDto,
@@ -173,6 +174,10 @@ export class AgentDetail {
 
   protected effortLabel(effort: EffortLevel): string {
     return EFFORT_LEVELS.find(e => e.id === effort)?.label ?? effort;
+  }
+
+  protected autonomyBlurb(level: number): string {
+    return AUTONOMY_LEVELS.find(l => l.level === level)?.blurb ?? '';
   }
 
   /** HH:mm:ss for log lines (format.ts has no time-only helper). */

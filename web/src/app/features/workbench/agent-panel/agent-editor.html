@@ -97,6 +97,16 @@
         <span class="hint">e.g. Read,Edit,Bash(git *)</span>
       </div>
 
+      <div class="field">
+        <label for="agent-autonomy">Autonomy level</label>
+        <select id="agent-autonomy" class="select" [(ngModel)]="form.autonomyLevel">
+          @for (level of autonomyLevels; track level.level) {
+            <option [ngValue]="level.level">{{ level.label }} — {{ level.blurb }}</option>
+          }
+        </select>
+        <span class="hint">Promote on first-pass and escalation evidence — the dashboard’s Delivery section recommends moves.</span>
+      </div>
+
       <div class="switch-rows">
         <label class="switch-row">
           <span class="switch">

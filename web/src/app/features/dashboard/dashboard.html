@@ -154,6 +154,9 @@
     }
   </section>
 
+  <!-- Delivery — the five metrics that measure value that stuck -->
+  <app-delivery-section [days]="days()" />
+
   <!-- Agent breakdown table — the accessible view behind the charts -->
   <section class="card block" [class.dim]="refreshing()">
     <div class="card-head">

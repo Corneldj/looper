@@ -126,8 +126,9 @@ public sealed partial class ClaudeModuleSourceGenerator(
                 string Blurb { get; }            // one sentence
                 IReadOnlyList<ResourceField> Fields { get; }
                 ResourceContribution Contribute(ResourceModuleContext context);
+                void PrepareRun(ResourceModuleContext context) { }  // optional: idempotent workspace setup before each run
             }
-            public enum ResourceFieldKind { Text, Multiline, Number, Boolean, Password, Select }
+            public enum ResourceFieldKind { Text, Multiline, Number, Boolean, Password, Select, Path }
             public sealed record ResourceField(string Key, string Label, ResourceFieldKind Kind, bool Required = false, string? Hint = null, string[]? Options = null, string? Placeholder = null);
             // ResourceModuleContext: string ConfigJson; T? GetConfig<T>() where T : class; string? GetString(string key); bool GetBool(string key); double? GetNumber(string key)
             // ResourceContribution (all optional to fill): Dictionary<string,string> EnvironmentVariables; List<string> SystemPromptRules; List<string> PromptSections; List<string> AdditionalDirectories; Dictionary<string,McpServerSpec> McpServers
@@ -136,6 +137,7 @@ public sealed partial class ClaudeModuleSourceGenerator(
             Guidance:
             - Fields drive the form users fill in; field Keys are camelCase and become the JSON config keys.
             - Use ResourceFieldKind.Password for any secret; expose secrets to the run ONLY as EnvironmentVariables.
+            - Use ResourceFieldKind.Path for filesystem locations — the UI attaches a folder browser to those fields.
             - In Contribute, read config values with context.GetString/GetBool/GetNumber, handle missing values gracefully (skip, don't throw).
             - PromptSections should tell the agent what the resource is and how to use it (mention env var names it can rely on).
             - Example shape:

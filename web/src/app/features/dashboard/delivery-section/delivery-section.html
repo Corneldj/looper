@@ -1,0 +1,280 @@
+<section class="delivery">
+  <header class="delivery-head">
+    <div>
+      <span class="section-label">Delivery — value that stuck</span>
+      <p class="head-sub">
+        Output volume is meaningless; these five measure whether agent work ships and lasts.
+      </p>
+    </div>
+    <button type="button" class="btn btn-soft btn-sm" (click)="logPrOpen.set(true)">Log PR</button>
+  </header>
+
+  @if (apiError()) {
+    <div class="stale-note">
+      Couldn’t reach the Looper API —
+      {{ loaded() ? 'showing the last loaded delivery data.' : 'delivery numbers will fill in once it’s back.' }}
+    </div>
+  }
+
+  <!-- The five metrics -->
+  <div class="kpis">
+    <div class="card kpi">
+      <span class="section-label">Cost per merged PR</span>
+      <div class="kpi-slot">
+        @if (metrics(); as m) {
+          @if (m.costPerMergedPrUsd !== null) {
+            <span class="kpi-value num">{{ formatCost(m.costPerMergedPrUsd) }}</span>
+          } @else if (m.totalCostUsd > 0) {
+            <span class="kpi-null amber num">{{ formatCost(m.totalCostUsd) }} spent, nothing merged yet</span>
+          } @else {
+            <span class="kpi-null">no real runs yet</span>
+          }
+        } @else {
+          <span class="kpi-value dim">—</span>
+        }
+      </div>
+      <p class="kpi-caption">Does spend convert into shipped work?</p>
+    </div>
+
+    <div class="card kpi">
+      <span class="section-label">First-pass success</span>
+      <div class="kpi-slot">
+        @if (metrics(); as m) {
+          @if (m.firstPassRate !== null) {
+            <span class="kpi-value num {{ firstPassTone(m.firstPassRate) }}">{{ formatPercent(m.firstPassRate) }}</span>
+          } @else {
+            <span class="kpi-null">no merged PRs yet</span>
+          }
+        } @else {
+          <span class="kpi-value dim">—</span>
+        }
+      </div>
+      <p class="kpi-caption">Merged untouched — or are humans quietly fixing it?</p>
+    </div>
+
+    <div class="card kpi">
+      <span class="section-label">Code survival</span>
+      <div class="kpi-slot">
+        @if (metrics(); as m) {
+          @if (m.codeSurvivalRate !== null) {
+            <span class="kpi-value num">{{ formatPercent(m.codeSurvivalRate) }}</span>
+            <span class="kpi-sub num">({{ m.survivalCheckedPrs }} PR{{ m.survivalCheckedPrs === 1 ? '' : 's' }} checked)</span>
+          } @else {
+            <span class="kpi-null">no matured PRs yet</span>
+          }
+        } @else {
+          <span class="kpi-value dim">—</span>
+        }
+      </div>
+      <p class="kpi-caption">Still alive after the survival window, or rewritten?</p>
+    </div>
+
+    <div class="card kpi">
+      <span class="section-label">Review churn</span>
+      <div class="kpi-slot">
+        @if (metrics(); as m) {
+          @if (m.reviewChurnPer100Lines !== null) {
+            <span class="kpi-value num">{{ m.reviewChurnPer100Lines.toFixed(1) }}</span>
+            <span class="kpi-sub">/ 100 lines</span>
+          } @else {
+            <span class="kpi-null">no reviewed PRs yet</span>
+          }
+        } @else {
+          <span class="kpi-value dim">—</span>
+        }
+      </div>
+      <p class="kpi-caption">Review effort per unit of change.</p>
+    </div>
+
+    <div class="card kpi">
+      <span class="section-label">Escalation rate</span>
+      <div class="kpi-slot">
+        @if (metrics(); as m) {
+          @if (m.escalationRate !== null) {
+            <span class="kpi-value num {{ escalationTone(m.escalationRate) }}">{{ formatPercent(m.escalationRate) }}</span>
+            <span class="kpi-sub num">{{ m.escalatedRuns }}/{{ m.completedRuns }} runs</span>
+          } @else {
+            <span class="kpi-null">no completed real runs yet</span>
+          }
+        } @else {
+          <span class="kpi-value dim">—</span>
+        }
+      </div>
+      <p class="kpi-caption">Are autonomy levels set right?</p>
+    </div>
+  </div>
+
+  <!-- Autonomy panel -->
+  @if (metrics(); as m) {
+    @if (m.agents.length > 0) {
+      <div class="card block autonomy">
+        <div class="card-head">
+          <h3>Autonomy</h3>
+          <span class="card-hint">Autonomy is a dial: promote on evidence, demote as readily.</span>
+        </div>
+        <div class="table-wrap">
+          <table class="data">
+            <thead>
+              <tr>
+                <th>Agent</th>
+                <th>Autonomy</th>
+                <th class="r">Merged PRs</th>
+                <th class="r">Cost</th>
+                <th class="r">Cost / PR</th>
+                <th class="r">First-pass</th>
+                <th class="r">Escalation</th>
+                <th class="r">Recommendation</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (a of m.agents; track a.agentId) {
+                <tr>
+                  <td class="strong">{{ a.name }}</td>
+                  <td>
+                    <span class="chip chip-accent" [title]="autonomyBlurb(a.autonomyLevel)">L{{ a.autonomyLevel }}</span>
+                  </td>
+                  <td class="r num">{{ a.mergedPrs }}</td>
+                  <td class="r num">{{ formatCost(a.costUsd) }}</td>
+                  <td class="r num">{{ a.costPerMergedPrUsd !== null ? formatCost(a.costPerMergedPrUsd) : '—' }}</td>
+                  <td class="r num">{{ a.firstPassRate !== null ? formatPercent(a.firstPassRate) : '—' }}</td>
+                  <td class="r num">{{ a.escalationRate !== null ? formatPercent(a.escalationRate) : '—' }}</td>
+                  <td class="r">
+                    @switch (a.recommendation) {
+                      @case ('promote') {
+                        <span class="chip chip-green">▲ promote</span>
+                      }
+                      @case ('demote') {
+                        <span class="chip chip-red">▼ demote</span>
+                      }
+                      @case ('hold') {
+                        <span class="chip chip-neutral">hold</span>
+                      }
+                      @default {
+                        <span class="gathering">gathering evidence</span>
+                      }
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+  }
+
+  <!-- Tracked pull requests -->
+  <div class="card block prs">
+    <div class="card-head">
+      <h3>Pull requests</h3>
+      @if (metrics(); as m) {
+        <span class="card-hint num">{{ m.openPrs }} open · {{ m.mergedPrs }} merged · {{ m.closedPrs }} closed</span>
+      }
+    </div>
+
+    @if (actionError(); as message) {
+      <p class="action-error">{{ message }}</p>
+    }
+
+    @if (!loaded()) {
+      <div class="loading-hint">Loading…</div>
+    } @else if (sortedPrs().length === 0) {
+      <div class="empty-state">
+        <div class="glyph">🚢</div>
+        <h3>No PRs tracked yet</h3>
+        <p>
+          Agents report theirs automatically during real runs (the delivery protocol is injected into every run);
+          or log one manually.
+        </p>
+      </div>
+    } @else {
+      <div class="table-wrap">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Pull request</th>
+              <th>Agent</th>
+              <th class="r">Size</th>
+              <th class="r">Rounds</th>
+              <th class="r">Comments</th>
+              <th class="r">Human commits</th>
+              <th class="r">First-pass</th>
+              <th class="r">Survival</th>
+              <th class="r">Synced</th>
+              <th class="r"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (pr of sortedPrs(); track pr.id) {
+              <tr>
+                <td>
+                  <span class="chip {{ statusChip(pr.status) }}">{{ pr.status }}</span>
+                </td>
+                <td class="title-cell">
+                  @if (pr.url) {
+                    <a class="pr-title" [href]="pr.url" target="_blank" rel="noopener">{{ pr.title }}</a>
+                  } @else {
+                    <span class="pr-title">{{ pr.title }}</span>
+                  }
+                  @if (pr.repository) {
+                    <span class="repo mono">{{ pr.repository }}</span>
+                  }
+                  @if (pr.syncError) {
+                    <span class="sync-warn">⚠ {{ pr.syncError }}</span>
+                  }
+                </td>
+                <td class="agent">{{ pr.agentName }}</td>
+                <td class="r num size">
+                  <span class="add">+{{ pr.additions }}</span> <span class="del">−{{ pr.deletions }}</span>
+                </td>
+                <td class="r num">{{ pr.reviewRounds }}</td>
+                <td class="r num">{{ pr.reviewComments }}</td>
+                <td class="r num" [class.bad]="pr.humanCommits > 0 && pr.status === 'Merged'">
+                  {{ pr.humanCommits }}
+                </td>
+                <td class="r">
+                  @if (pr.firstPass === true) {
+                    <span class="fp good">✓</span>
+                  } @else if (pr.firstPass === false) {
+                    <span class="fp bad">✗</span>
+                  } @else {
+                    <span class="muted">—</span>
+                  }
+                </td>
+                <td
+                  class="r num"
+                  [title]="pr.survivalCheckedAtUtc ? 'checked ' + formatDateTime(pr.survivalCheckedAtUtc) : ''"
+                >
+                  {{ pr.survivalRate !== null ? formatPercent(pr.survivalRate) : '—' }}
+                </td>
+                <td class="r when num">{{ relativeTime(pr.lastSyncedAtUtc) }}</td>
+                <td class="r actions">
+                  <button
+                    class="icon-btn"
+                    title="Sync now"
+                    [class.spin]="syncingIds().has(pr.id)"
+                    [disabled]="syncingIds().has(pr.id)"
+                    (click)="sync(pr)"
+                  >
+                    ↻
+                  </button>
+                  <button class="icon-btn" title="Edit" (click)="editingPr.set(pr)">✎</button>
+                  <button class="icon-btn" title="Stop tracking" (click)="remove(pr)">🗑</button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</section>
+
+@if (logPrOpen()) {
+  <app-log-pr-modal (closed)="onLogPrClosed($event)" />
+}
+
+@if (editingPr(); as pr) {
+  <app-edit-pr-modal [pr]="pr" (closed)="onEditClosed($event)" />
+}

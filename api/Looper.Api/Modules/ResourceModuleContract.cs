@@ -31,6 +31,15 @@ public interface IResourceTypeModule
 
     /// <summary>Translates a stored config into capabilities applied to a run.</summary>
     ResourceContribution Contribute(ResourceModuleContext context);
+
+    /// <summary>
+    /// Called once before each run that uses this resource, to prepare its workspace —
+    /// e.g. seeding schema files or tools into a storage folder. Must be idempotent.
+    /// Default interface method so existing compiled modules keep loading unchanged.
+    /// </summary>
+    void PrepareRun(ResourceModuleContext context)
+    {
+    }
 }
 
 public enum ResourceFieldKind
@@ -40,7 +49,10 @@ public enum ResourceFieldKind
     Number,
     Boolean,
     Password,
-    Select
+    Select,
+
+    /// <summary>A filesystem path — the UI offers the built-in folder browser.</summary>
+    Path
 }
 
 public sealed record ResourceField(

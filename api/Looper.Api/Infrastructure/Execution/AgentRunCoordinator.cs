@@ -56,7 +56,8 @@ public sealed class AgentRunCoordinator(
                 Trigger = trigger,
                 Status = RunStatus.Running,
                 StartedAtUtc = DateTime.UtcNow,
-                Model = agent.Model
+                Model = agent.Model,
+                DryRun = agent.DryRun
             };
             db.Runs.Add(run);
             await db.SaveChangesAsync(cancellationToken);

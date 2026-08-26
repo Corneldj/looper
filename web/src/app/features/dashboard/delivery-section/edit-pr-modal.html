@@ -1,0 +1,79 @@
+<!-- Deliberately no backdrop-click close: a stray click must not discard typed input. -->
+<div class="modal-backdrop" (keydown.escape)="cancel()">
+  <div class="modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Edit pull request</h2>
+      <button class="icon-btn" title="Close" (click)="cancel()">✕</button>
+    </div>
+    <p class="modal-blurb">
+      GitHub-hosted PRs sync these automatically when gh is authenticated — manual edits are for local or
+      non-GitHub work.
+    </p>
+
+    <div class="modal-form">
+      <div class="field">
+        <label>Title</label>
+        <input class="input" [(ngModel)]="title" />
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Status</label>
+          <select class="select" [(ngModel)]="status">
+            <option value="Open">Open</option>
+            <option value="Merged">Merged</option>
+            <option value="Closed">Closed</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Additions</label>
+          <input class="input num" type="number" min="0" [(ngModel)]="additions" />
+        </div>
+        <div class="field">
+          <label>Deletions</label>
+          <input class="input num" type="number" min="0" [(ngModel)]="deletions" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label>Review rounds</label>
+          <input class="input num" type="number" min="0" [(ngModel)]="reviewRounds" />
+          <span class="hint">Change-request rounds.</span>
+        </div>
+        <div class="field">
+          <label>Review comments</label>
+          <input class="input num" type="number" min="0" [(ngModel)]="reviewComments" />
+        </div>
+        <div class="field">
+          <label>Human commits</label>
+          <input class="input num" type="number" min="0" [(ngModel)]="humanCommits" />
+          <span class="hint">Human fixes break first-pass.</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Local repo path <span class="optional">optional</span></label>
+        <input class="input mono" [(ngModel)]="repoPath" placeholder="/home/you/projects/my-app" />
+        <span class="hint">A local clone lets Looper compute code survival.</span>
+      </div>
+
+      <div class="field">
+        <label>Merge commit SHA <span class="optional">optional</span></label>
+        <input class="input mono" [(ngModel)]="mergeCommitSha" placeholder="abc1234…" />
+        <span class="hint">Anchors the survival check for locally-merged work.</span>
+      </div>
+    </div>
+
+    @if (saveError(); as message) {
+      <p class="save-error">{{ message }}</p>
+    }
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" (click)="cancel()">Cancel</button>
+      <button class="btn btn-primary" [disabled]="!canSave() || saving()" (click)="save()">
+        {{ saving() ? 'Saving…' : 'Save changes' }}
+      </button>
+    </div>
+  </div>
+</div>

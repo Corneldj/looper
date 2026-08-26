@@ -11,6 +11,7 @@ namespace Looper.Api.Modules;
 public sealed class ResourceModuleRegistry(ILogger<ResourceModuleRegistry> logger)
 {
     private readonly ConcurrentDictionary<string, IResourceTypeModule> _modules = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _builtInKeys = new(StringComparer.OrdinalIgnoreCase);
 
     public string ModulesDirectory { get; } = Path.Combine(AppContext.BaseDirectory, "modules");
 
@@ -19,6 +20,16 @@ public sealed class ResourceModuleRegistry(ILogger<ResourceModuleRegistry> logge
 
     public bool TryGet(string typeKey, out IResourceTypeModule module) =>
         _modules.TryGetValue(typeKey, out module!);
+
+    /// <summary>True for modules compiled into the app (shipped types) — they cannot be removed.</summary>
+    public bool IsBuiltIn(string typeKey) => _builtInKeys.Contains(typeKey);
+
+    /// <summary>Registers a module compiled into the app itself. Called once at startup, before reconcile.</summary>
+    public void RegisterBuiltIn(IResourceTypeModule module)
+    {
+        _modules[module.TypeKey] = module;
+        _builtInKeys.Add(module.TypeKey);
+    }
 
     /// <summary>
     /// Startup reconciliation: loads the module for every database record — recompiling from
@@ -85,6 +96,10 @@ public sealed class ResourceModuleRegistry(ILogger<ResourceModuleRegistry> logge
             ?? throw new InvalidOperationException($"{Path.GetFileName(dllPath)} contains no IResourceTypeModule implementation.");
 
         var module = (IResourceTypeModule)Activator.CreateInstance(moduleType)!;
+        if (_builtInKeys.Contains(module.TypeKey))
+        {
+            throw new InvalidOperationException($"'{module.TypeKey}' is a built-in resource type and cannot be replaced by a DLL.");
+        }
         _modules[module.TypeKey] = module;
         return module;
     }

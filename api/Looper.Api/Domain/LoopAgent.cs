@@ -25,6 +25,13 @@ public class LoopAgent
     public int IntervalMinutes { get; set; } = 60;
     public bool Enabled { get; set; }
 
+    /// <summary>
+    /// Autonomy is a dial, not a switch: 1 proposes only, 2 executes sandboxed with diff approval,
+    /// 3 executes autonomously with after-the-fact review, 4 fully autonomous with sampled audits.
+    /// Promote on first-pass success and escalation evidence; demote as readily.
+    /// </summary>
+    public int AutonomyLevel { get; set; } = 3;
+
     /// <summary>When true, runs use the simulated executor: no tokens are spent.</summary>
     public bool DryRun { get; set; }
 

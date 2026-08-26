@@ -13,6 +13,15 @@ public class LooperOptions
     /// <summary>Hard wall-clock limit per run.</summary>
     public int RunTimeoutMinutes { get; set; } = 30;
 
+    /// <summary>Base URL agents use to report PRs and escalations back to Looper during a run.</summary>
+    public string PublicUrl { get; set; } = "http://localhost:5210";
+
+    /// <summary>How often the delivery sync refreshes GitHub PR state and runs survival checks.</summary>
+    public int DeliverySyncMinutes { get; set; } = 15;
+
+    /// <summary>Days after merge before code survival is measured.</summary>
+    public int SurvivalWindowDays { get; set; } = 14;
+
     /// <summary>Maximum number of agent loops executing at the same time.</summary>
     public int MaxConcurrentRuns { get; set; } = 2;
 

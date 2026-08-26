@@ -48,6 +48,18 @@ public sealed class CreateResourceHandler(LooperDbContext db, ResourceModuleRegi
                 throw new ValidationException($"Unknown resource type '{command.CustomTypeKey}'.");
             }
             customTypeKey = module.TypeKey;
+
+            // Scaffold the workspace now (graph folders seed their toolkit/protocol) so the
+            // user can inspect it immediately and dry-run agents find it in place. An
+            // unwritable path is a config error worth failing the save for.
+            try
+            {
+                module.PrepareRun(new Looper.Api.Modules.ResourceModuleContext(command.ConfigJson));
+            }
+            catch (Exception ex)
+            {
+                throw new ValidationException($"The resource's workspace could not be prepared: {ex.Message}");
+            }
         }
 
         var resource = new Resource

@@ -1,0 +1,230 @@
+/* Layout & composition only — visuals come from the shared design system. */
+
+:host {
+  display: block;
+  margin: 4px 0 20px;
+}
+
+/* ---------- section header ---------- */
+
+.delivery-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 14px;
+  padding-top: 6px;
+}
+
+.head-sub {
+  color: var(--text-3);
+  font-size: 12.5px;
+  margin-top: 3px;
+  max-width: 70ch;
+}
+
+.stale-note {
+  margin: 0 0 16px;
+  padding: 9px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--amber);
+  background: var(--amber-soft);
+  border-radius: var(--radius-sm);
+}
+
+/* ---------- the five metric tiles ---------- */
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 1100px) {
+  .kpis {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 20px 22px;
+}
+
+.kpi-slot {
+  min-height: 34px;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 7px;
+}
+
+.kpi-value {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+
+  &.good { color: var(--green); }
+  &.warn { color: var(--amber); }
+  &.bad { color: var(--red); }
+  &.dim { color: var(--text-3); font-weight: 600; }
+}
+
+.kpi-sub {
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.kpi-null {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3);
+  line-height: 1.4;
+  align-self: center;
+
+  &.amber { color: var(--amber); }
+}
+
+.kpi-caption {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
+/* ---------- card blocks ---------- */
+
+.block {
+  margin-bottom: 16px;
+
+  &:last-child { margin-bottom: 0; }
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+
+  h3 { font-size: 15.5px; }
+}
+
+.card-hint {
+  font-size: 12px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.loading-hint {
+  padding: 28px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+table.data {
+  th.r,
+  td.r { text-align: right; }
+}
+
+.muted { color: var(--text-3); }
+.strong { font-weight: 600; }
+
+/* ---------- autonomy panel ---------- */
+
+.gathering {
+  font-size: 12px;
+  color: var(--text-3);
+  font-style: italic;
+  white-space: nowrap;
+}
+
+/* ---------- PR table ---------- */
+
+.action-error {
+  margin: -4px 0 14px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--amber);
+  background: var(--amber-soft);
+  border-radius: var(--radius-sm);
+}
+
+.title-cell {
+  max-width: 380px;
+  min-width: 200px;
+}
+
+.pr-title {
+  display: block;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+a.pr-title:hover { color: var(--accent); }
+
+.repo {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.sync-warn {
+  display: block;
+  font-size: 11.5px;
+  color: var(--amber);
+  margin-top: 2px;
+}
+
+.agent { white-space: nowrap; }
+
+.size {
+  white-space: nowrap;
+
+  .add { color: var(--green); }
+  .del { color: var(--red); }
+}
+
+td.bad {
+  color: var(--red);
+  font-weight: 700;
+}
+
+.fp {
+  font-weight: 700;
+
+  &.good { color: var(--green); }
+  &.bad { color: var(--red); }
+}
+
+.when {
+  font-size: 12.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.actions {
+  white-space: nowrap;
+
+  .icon-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .icon-btn.spin { animation: rotate 0.9s linear infinite; }
+}
+
+@keyframes rotate {
+  to { transform: rotate(360deg); }
+}

@@ -57,6 +57,19 @@ export class ResourceEditor implements OnInit {
     return typeof value === 'string' ? value : '';
   }
 
+  /** Which dynamic Path-kind field the folder picker is currently choosing for. */
+  readonly customPathFieldKey = signal<string | null>(null);
+
+  openCustomFolderPicker(fieldKey: string): void {
+    this.customPathFieldKey.set(fieldKey);
+  }
+
+  onCustomFolderPicked(picked: string | null): void {
+    const fieldKey = this.customPathFieldKey();
+    this.customPathFieldKey.set(null);
+    if (picked && fieldKey) this.setCustomValue(fieldKey, picked);
+  }
+
   readonly saving = signal(false);
   readonly saveError = signal<string | null>(null);
 

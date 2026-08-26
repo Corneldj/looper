@@ -223,6 +223,7 @@ public class AgentsAndDashboardApiTests(LooperApiFactory factory) : IClassFixtur
             workingDirectory = (string?)null,
             allowedTools = (string?)null,
             bypassPermissions = true,
+            autonomyLevel = 3,
             dryRun = true,
             resourceIds = Array.Empty<Guid>()
         }, TestJson.Options);
@@ -298,6 +299,7 @@ public class AgentsAndDashboardApiTests(LooperApiFactory factory) : IClassFixtur
             intervalMinutes = 60,
             maxTurns = 10,
             bypassPermissions = true,
+            autonomyLevel = 3,
             dryRun = true,
             resourceIds = Array.Empty<Guid>()
         }, TestJson.Options);

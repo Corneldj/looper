@@ -63,6 +63,11 @@
         <span class="section-label">Next run</span>
         <span class="meta-value">{{ a.enabled ? relativeTime(a.nextRunAtUtc) : '—' }}</span>
       </div>
+      <div class="card meta-card">
+        <span class="section-label">Autonomy</span>
+        <span class="meta-value">L{{ a.autonomyLevel }}</span>
+        <span class="meta-hint">{{ autonomyBlurb(a.autonomyLevel) }}</span>
+      </div>
     </div>
 
     <section class="card runs-card">
@@ -106,6 +111,9 @@
                       }
                       {{ runStatusLabel(run.status) }}
                     </span>
+                    @if (run.escalated) {
+                      <span class="chip chip-amber escalated-chip">⚑ escalated</span>
+                    }
                   </td>
                   <td class="num">{{ run.status === 'Running' ? '…' : formatDuration(run.durationMs) }}</td>
                   <td class="num">{{ run.numTurns }}</td>
@@ -188,6 +196,15 @@
               <span class="metric-value num">{{ formatTokens(run.cacheReadTokens) }}</span>
             </div>
           </div>
+
+          @if (run.escalated) {
+            <div class="escalation-callout">
+              <span class="escalation-title">⚑ Escalated to you</span>
+              @if (run.escalationReason) {
+                <p class="escalation-reason">{{ run.escalationReason }}</p>
+              }
+            </div>
+          }
 
           <section class="drawer-section">
             <span class="section-label">Result</span>

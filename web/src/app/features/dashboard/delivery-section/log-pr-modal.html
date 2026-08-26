@@ -1,0 +1,58 @@
+<!-- Deliberately no backdrop-click close: a stray click must not discard typed input. -->
+<div class="modal-backdrop" (keydown.escape)="cancel()">
+  <div class="modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Log a pull request</h2>
+      <button class="icon-btn" title="Close" (click)="cancel()">✕</button>
+    </div>
+    <p class="modal-blurb">
+      Agents report PRs automatically during real runs — log one manually when the work happened elsewhere.
+    </p>
+
+    <div class="modal-form">
+      <div class="field">
+        <label>Agent</label>
+        <select class="select" [(ngModel)]="agentId">
+          <option value="" disabled>Which agent produced it?</option>
+          @for (agent of agentsStore.agents(); track agent.id) {
+            <option [value]="agent.id">{{ agent.name }}</option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <label>PR URL <span class="optional">optional</span></label>
+        <input class="input mono" [(ngModel)]="url" placeholder="https://github.com/org/repo/pull/123" />
+        <span class="hint">GitHub URLs sync status, size and review data automatically when gh is authenticated.</span>
+      </div>
+
+      <div class="field">
+        <label>
+          Title
+          @if (!url().trim()) {
+            <span class="req">*</span>
+          }
+        </label>
+        <input class="input" [(ngModel)]="title" placeholder="What does the PR do?" />
+        <span class="hint">Required without a URL — with one, the title syncs from GitHub.</span>
+      </div>
+
+      <div class="field">
+        <label>Local repo path <span class="optional">optional</span></label>
+        <input class="input mono" [(ngModel)]="repoPath" placeholder="/home/you/projects/my-app" />
+        <span class="hint">A local clone lets Looper compute code survival for local or non-GitHub work.</span>
+      </div>
+    </div>
+
+    @if (saveError(); as message) {
+      <p class="save-error">{{ message }}</p>
+    }
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" (click)="cancel()">Cancel</button>
+      <button class="btn btn-primary" [disabled]="!canSave() || saving()" (click)="save()">
+        {{ saving() ? 'Logging…' : 'Log PR' }}
+      </button>
+    </div>
+  </div>
+</div>

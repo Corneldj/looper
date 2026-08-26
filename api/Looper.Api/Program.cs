@@ -44,6 +44,12 @@ builder.Services.AddSingleton<AgentRunCoordinator>();
 builder.Services.AddSingleton<ClaudeCliStatusService>();
 builder.Services.AddHostedService<AgentSchedulerService>();
 
+// Delivery tracking: PR sync via gh, code survival via git blame.
+builder.Services.AddSingleton<Looper.Api.Infrastructure.Delivery.GitHubPrInspector>();
+builder.Services.AddSingleton<Looper.Api.Infrastructure.Delivery.CodeSurvivalCalculator>();
+builder.Services.AddSingleton<Looper.Api.Infrastructure.Delivery.PullRequestSynchronizer>();
+builder.Services.AddHostedService<Looper.Api.Infrastructure.Delivery.DeliverySyncService>();
+
 // Dynamic resource-type modules.
 builder.Services.AddSingleton<Looper.Api.Modules.ResourceModuleCompiler>();
 builder.Services.AddSingleton<Looper.Api.Modules.ResourceModuleRegistry>();
@@ -62,7 +68,31 @@ var app = builder.Build();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<LooperDbContext>();
-    await db.Database.EnsureCreatedAsync();
+
+    // Databases from before the migrations era were created with EnsureCreated and have no
+    // migrations history. Stamp them with the baseline so Migrate() applies only what's new,
+    // preserving live data.
+    var hasLegacySchema = false;
+    if (await db.Database.CanConnectAsync())
+    {
+        var connection = db.Database.GetDbConnection();
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='Runs') > 0 " +
+            "AND (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='__EFMigrationsHistory') = 0";
+        hasLegacySchema = Convert.ToBoolean(await command.ExecuteScalarAsync());
+    }
+    if (hasLegacySchema)
+    {
+        var baseline = db.Database.GetMigrations().First(); // InitialCreate matches the legacy schema
+        await db.Database.ExecuteSqlRawAsync(
+            "CREATE TABLE IF NOT EXISTS __EFMigrationsHistory (MigrationId TEXT NOT NULL PRIMARY KEY, ProductVersion TEXT NOT NULL)");
+        await db.Database.ExecuteSqlAsync(
+            $"INSERT OR IGNORE INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ({baseline}, '10.0.11')");
+        app.Logger.LogInformation("Stamped pre-migrations database with baseline {Baseline}", baseline);
+    }
+    await db.Database.MigrateAsync();
 
     // Crash recovery: runs left 'Running' by a previous process can never finish now.
     var interrupted = await db.Runs
@@ -76,10 +106,15 @@ await using (var scope = app.Services.CreateAsyncScope())
         app.Logger.LogWarning("Marked {Count} orphaned run(s) from a previous process as failed", interrupted);
     }
 
-    // Bring dynamic resource-type modules back to life.
+    // Shipped graph resource types, then the user's dynamic modules on top.
+    var registry = scope.ServiceProvider.GetRequiredService<Looper.Api.Modules.ResourceModuleRegistry>();
+    registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.ContinuousVectorMemoryGraphModule());
+    registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.KnowledgeGraphModule());
+    registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.MemoryGraphModule());
+    registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.ExecutionGraphModule());
+
     var moduleRecords = await db.ResourceModules.AsNoTracking().ToListAsync();
-    await scope.ServiceProvider.GetRequiredService<Looper.Api.Modules.ResourceModuleRegistry>()
-        .ReconcileAsync(moduleRecords, scope.ServiceProvider.GetRequiredService<Looper.Api.Modules.ResourceModuleCompiler>());
+    await registry.ReconcileAsync(moduleRecords, scope.ServiceProvider.GetRequiredService<Looper.Api.Modules.ResourceModuleCompiler>());
 }
 
 app.UseCors();

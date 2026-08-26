@@ -13,6 +13,7 @@ public sealed record AgentSummaryDto(
     int IntervalMinutes,
     bool Enabled,
     bool DryRun,
+    int AutonomyLevel,
     bool IsRunning,
     int ResourceCount,
     DateTime? LastRunAtUtc,
@@ -30,6 +31,7 @@ public sealed record AgentDetailDto(
     int IntervalMinutes,
     bool Enabled,
     bool DryRun,
+    int AutonomyLevel,
     bool IsRunning,
     int ResourceCount,
     DateTime? LastRunAtUtc,
@@ -60,6 +62,7 @@ public sealed record SaveAgentRequest(
     string? AllowedTools,
     bool BypassPermissions,
     bool DryRun,
+    int AutonomyLevel,
     List<Guid> ResourceIds);
 
 /// <summary>Run-derived figures shown alongside an agent: latest outcome and 24h activity.</summary>
@@ -79,6 +82,7 @@ public static class AgentMapper
         agent.IntervalMinutes,
         agent.Enabled,
         agent.DryRun,
+        agent.AutonomyLevel,
         isRunning,
         resourceCount,
         agent.LastRunAtUtc,
@@ -97,6 +101,7 @@ public static class AgentMapper
         agent.IntervalMinutes,
         agent.Enabled,
         agent.DryRun,
+        agent.AutonomyLevel,
         isRunning,
         agent.Resources.Count,
         agent.LastRunAtUtc,
@@ -118,6 +123,7 @@ public static class AgentMapper
     {
         agent.Name = request.Name.Trim();
         agent.Description = request.Description.Trim();
+        agent.AutonomyLevel = Math.Clamp(request.AutonomyLevel, 1, 4);
         agent.Prompt = request.Prompt;
         agent.Model = request.Model.Trim();
         agent.Effort = request.Effort;

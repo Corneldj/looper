@@ -38,11 +38,11 @@ public static class ResourceTypeCatalog
         new(nameof(ResourceType.PatToken), "PAT Token", "🔑", "A personal access token injected as an environment variable.", true, null)
     ];
 
-    public static ResourceTypeDto ToDto(this IResourceTypeModule module) => new(
+    public static ResourceTypeDto ToDto(this IResourceTypeModule module, bool builtIn = false) => new(
         module.TypeKey,
         module.DisplayName,
         module.Icon,
         module.Blurb,
-        BuiltIn: false,
+        BuiltIn: builtIn,
         module.Fields.Select(f => new ResourceFieldDto(f.Key, f.Label, f.Kind, f.Required, f.Hint, f.Options, f.Placeholder)).ToList());
 }

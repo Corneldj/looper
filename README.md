@@ -9,9 +9,11 @@
 ## Highlights
 
 - **Loops, not chats** — an agent is a prompt plus a cadence: pick the model and effort level (`low → max`), cap turns and per-run spend, and let the scheduler fire it. Every iteration records real cost, tokens, duration and logs.
+- **Memory that survives the loop** — four shipped graph resources (continuous vector memory, knowledge, episodic memory, execution graphs) give agents persistent state on disk with a maintenance protocol baked into every run.
 - **Dry-run first** — new agents rehearse with a simulated executor that produces realistic cost numbers without spending a token. Flip the switch when the loop earns it.
 - **Resources are modular** — and you can mint new resource types *inside the app*: describe a capability and Claude writes the C# module, Roslyn compiles it, and it loads live. No restart.
 - **A dashboard your product owner can read** — spend over time, cost by agent and by model, success rate, run times, recent failures.
+- **Delivery metrics that measure value that stuck** — output volume is meaningless when agents can generate unlimited plausible work, so Looper tracks the five that survived: **cost per merged PR** (does spend convert into shipped work?), **first-pass success rate** (or are humans quietly fixing everything?), **code survival rate** (measured by `git blame` after a 14-day window — does agent output last?), **review churn per unit of change** (did "faster to produce" become "slower to accept"?), and **escalation rate** (are autonomy levels set correctly?). Agents report their PRs and escalations through a protocol injected into every real run; GitHub-hosted PRs stay fresh via `gh`; each agent carries an explicit **autonomy level (L1–L4)** with promote/demote recommendations computed from the evidence.
 
 | Workbench | Agent editor |
 |---|---|
@@ -34,6 +36,7 @@
 | Testing Action | shell command executed after every loop; non-zero exit fails the gate |
 | Sub-agent | `--agents` definition the main agent can delegate to |
 | PAT Token / Azure Connection | environment variables injected into the run (stored masked) |
+| Vector / Knowledge / Memory / Execution graphs | a persistent graph workspace: on creation Looper seeds it with `loopergraph.py` (a self-contained CLI enforcing typed edges from a controlled ontology, bi-temporal invalidate-never-delete, vector-entry recall, and a validated execution DAG), a starter ontology and a protocol README; runs get `--add-dir`, a `LOOPER_*_PATH` env var and a short tool-invocation protocol in the prompt. The vector graph can also attach a real vector store over MCP |
 | **Custom (AI-generated)** | anything a module contributes: env vars, rules, prompt sections, MCP servers, directories |
 
 **Agents (right panel)** run their loop prompt every *N* minutes with the chosen model, effort level, turn cap, per-run budget cap (`--max-budget-usd`) and resource set.

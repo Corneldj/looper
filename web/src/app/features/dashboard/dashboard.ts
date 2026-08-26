@@ -20,6 +20,7 @@ import {
 } from '../../core/format';
 import { SpendChart } from './spend-chart';
 import { BarList, BarListRow, OTHER_COLOR, SERIES_COLORS } from './bar-list';
+import { DeliverySection } from './delivery-section/delivery-section';
 
 interface Trend {
   dir: 'up' | 'down' | 'flat';
@@ -29,7 +30,7 @@ interface Trend {
 
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, SpendChart, BarList],
+  imports: [RouterLink, SpendChart, BarList, DeliverySection],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })

@@ -14,7 +14,7 @@ public sealed class GetResourceTypesHandler(ResourceModuleRegistry registry)
         IReadOnlyList<ResourceTypeDto> all =
         [
             .. ResourceTypeCatalog.BuiltIns,
-            .. registry.All.Select(m => m.ToDto())
+            .. registry.All.Select(m => m.ToDto(registry.IsBuiltIn(m.TypeKey)))
         ];
         return Task.FromResult(all);
     }

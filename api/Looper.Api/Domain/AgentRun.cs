@@ -30,6 +30,13 @@ public class AgentRun
     /// <summary>Model the run executed with, captured at trigger time (agents can be reconfigured later).</summary>
     public string Model { get; set; } = "";
 
+    /// <summary>The agent deliberately handed this run to a human — the autonomy-calibration signal.</summary>
+    public bool Escalated { get; set; }
+    public string? EscalationReason { get; set; }
+
+    /// <summary>Snapshot of the agent's dry-run flag at trigger time; simulated cost stays out of delivery metrics.</summary>
+    public bool DryRun { get; set; }
+
     public decimal CostUsd { get; set; }
     public long InputTokens { get; set; }
     public long OutputTokens { get; set; }

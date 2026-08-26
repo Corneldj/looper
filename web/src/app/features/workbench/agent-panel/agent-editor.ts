@@ -5,6 +5,7 @@ import { ResourcesStore } from '../../../core/stores';
 import { FolderPicker } from '../../../shared/folder-picker/folder-picker';
 import {
   AgentDetailDto,
+  AUTONOMY_LEVELS,
   EFFORT_LEVELS,
   EffortLevel,
   MODELS,
@@ -24,6 +25,7 @@ interface AgentForm {
   allowedTools: string;
   bypassPermissions: boolean;
   dryRun: boolean;
+  autonomyLevel: number;
 }
 
 @Component({
@@ -64,6 +66,7 @@ export class AgentEditor implements OnInit {
 
   protected readonly models = MODELS;
   protected readonly effortLevels = EFFORT_LEVELS;
+  protected readonly autonomyLevels = AUTONOMY_LEVELS;
   protected readonly intervalPresets = [
     { label: '15m', minutes: 15 },
     { label: '1h', minutes: 60 },
@@ -89,6 +92,7 @@ export class AgentEditor implements OnInit {
     allowedTools: '',
     bypassPermissions: true,
     dryRun: true,
+    autonomyLevel: 3,
   };
 
   protected readonly resourceGroups = computed(() => {
@@ -121,6 +125,7 @@ export class AgentEditor implements OnInit {
         allowedTools: existing.allowedTools ?? '',
         bypassPermissions: existing.bypassPermissions,
         dryRun: existing.dryRun,
+        autonomyLevel: existing.autonomyLevel,
       };
       this.selectedIds.set(new Set(existing.resourceIds));
     }
@@ -185,6 +190,7 @@ export class AgentEditor implements OnInit {
       allowedTools: f.allowedTools.trim() || null,
       bypassPermissions: f.bypassPermissions,
       dryRun: f.dryRun,
+      autonomyLevel: f.autonomyLevel,
       resourceIds: [...this.selectedIds()],
     };
   }

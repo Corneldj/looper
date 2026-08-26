@@ -60,12 +60,14 @@ export class ResourcePanel implements OnInit {
   pickType(entry: ResourceTypeDto): void {
     this.pickerOpen.set(false);
     this.editing.set(null);
-    if (entry.builtIn) {
-      this.editorTypeDef.set(null);
-      this.editorType.set(entry.typeKey as ResourceType);
-    } else {
+    // Field specs present → the generic dynamic form (AI-generated and shipped graph types alike);
+    // absent → one of the classic types with a bespoke form. builtIn only governs deletability.
+    if (entry.fields) {
       this.editorTypeDef.set(entry);
       this.editorType.set('Custom');
+    } else {
+      this.editorTypeDef.set(null);
+      this.editorType.set(entry.typeKey as ResourceType);
     }
   }
 

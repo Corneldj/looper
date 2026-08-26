@@ -19,6 +19,7 @@ public sealed class UpdateAgentValidator : AbstractValidator<UpdateAgentCommand>
         RuleFor(c => c.Request.Model).NotEmpty();
         RuleFor(c => c.Request.IntervalMinutes).InclusiveBetween(1, 10080);
         RuleFor(c => c.Request.MaxTurns).InclusiveBetween(1, 250);
+        RuleFor(c => c.Request.AutonomyLevel).InclusiveBetween(1, 4);
         RuleFor(c => c.Request.MaxBudgetUsd).GreaterThan(0).When(c => c.Request.MaxBudgetUsd.HasValue);
     }
 }

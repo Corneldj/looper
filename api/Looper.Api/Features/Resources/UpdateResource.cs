@@ -50,6 +50,21 @@ public sealed class UpdateResourceHandler(LooperDbContext db, Looper.Api.Modules
         entity.ConfigJson = SecretMasker.PreserveSecrets(entity, command.ConfigJson, registry);
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
+        // Re-scaffold in case the storage path changed (idempotent for graph modules).
+        if (entity.Type == Looper.Api.Domain.ResourceType.Custom && entity.CustomTypeKey is not null
+            && registry.TryGet(entity.CustomTypeKey, out var module))
+        {
+            try
+            {
+                module.PrepareRun(new Looper.Api.Modules.ResourceModuleContext(entity.ConfigJson));
+            }
+            catch (Exception ex)
+            {
+                throw new FluentValidation.ValidationException(
+                    $"The resource's workspace could not be prepared: {ex.Message}");
+            }
+        }
+
         await db.SaveChangesAsync(cancellationToken);
         return entity.ToDto(resource.AgentCount, registry);
     }

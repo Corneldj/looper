@@ -54,6 +54,8 @@
           <span>{{ formatInterval(agent.intervalMinutes) }}</span>
           <span class="dot">·</span>
           <span>{{ agent.resourceCount }} resources</span>
+          <span class="dot">·</span>
+          <span class="chip chip-neutral" [title]="autonomyBlurb(agent.autonomyLevel)">L{{ agent.autonomyLevel }}</span>
         </div>
 
         @if (agent.description) {

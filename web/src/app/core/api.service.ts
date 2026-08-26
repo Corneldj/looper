@@ -7,6 +7,10 @@ import {
   AgentSummaryDto,
   ClaudeInstallResultDto,
   ClaudeStatusDto,
+  DeliveryMetricsDto,
+  PullRequestDto,
+  RegisterPrBody,
+  UpdatePrBody,
   CostSeriesPointDto,
   DashboardSummaryDto,
   DirectoryListingDto,
@@ -61,6 +65,39 @@ export class ApiService {
 
   deleteResourceType(typeKey: string): Observable<void> {
     return this.http.delete<void>(`${API_BASE}/resource-types/${typeKey}`);
+  }
+
+  // ---------- Delivery: PRs, escalations, and the five metrics ----------
+
+  getDeliveryMetrics(days: number): Observable<DeliveryMetricsDto> {
+    return this.http.get<DeliveryMetricsDto>(`${API_BASE}/delivery/metrics`, { params: new HttpParams().set('days', days) });
+  }
+
+  getPullRequests(days: number, agentId?: string): Observable<PullRequestDto[]> {
+    let params = new HttpParams().set('days', days);
+    if (agentId) params = params.set('agentId', agentId);
+    return this.http.get<PullRequestDto[]>(`${API_BASE}/delivery/prs`, { params });
+  }
+
+  registerPullRequest(body: RegisterPrBody): Observable<PullRequestDto> {
+    return this.http.post<PullRequestDto>(`${API_BASE}/delivery/prs`, body);
+  }
+
+  updatePullRequest(id: string, body: UpdatePrBody): Observable<PullRequestDto> {
+    return this.http.put<PullRequestDto>(`${API_BASE}/delivery/prs/${id}`, body);
+  }
+
+  deletePullRequest(id: string): Observable<void> {
+    return this.http.delete<void>(`${API_BASE}/delivery/prs/${id}`);
+  }
+
+  /** On-demand GitHub/survival refresh of one PR. */
+  syncPullRequest(id: string): Observable<PullRequestDto> {
+    return this.http.post<PullRequestDto>(`${API_BASE}/delivery/prs/${id}/sync`, {});
+  }
+
+  escalateRun(runId: string, reason: string): Observable<void> {
+    return this.http.post<void>(`${API_BASE}/runs/${runId}/escalate`, { reason });
   }
 
   // ---------- Claude CLI status ----------

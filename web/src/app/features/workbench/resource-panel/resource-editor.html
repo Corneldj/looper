@@ -264,6 +264,18 @@
                     }
                   </select>
                 }
+                @case ('Path') {
+                  <label>{{ field.label }}@if (field.required) {<span class="req"> *</span>}</label>
+                  <div class="path-with-browse">
+                    <input
+                      class="input mono"
+                      [placeholder]="field.placeholder ?? ''"
+                      [ngModel]="asText(customValues()[field.key])"
+                      (ngModelChange)="setCustomValue(field.key, $event)"
+                    />
+                    <button type="button" class="btn btn-ghost" (click)="openCustomFolderPicker(field.key)">Browse…</button>
+                  </div>
+                }
                 @default {
                   <label>{{ field.label }}@if (field.required) {<span class="req"> *</span>}</label>
                   <input
@@ -298,4 +310,8 @@
 
 @if (folderPickerOpen()) {
   <app-folder-picker [startPath]="path() || null" (picked)="onFolderPicked($event)" />
+}
+
+@if (customPathFieldKey(); as fieldKey) {
+  <app-folder-picker [startPath]="asText(customValues()[fieldKey]) || null" (picked)="onCustomFolderPicked($event)" />
 }
