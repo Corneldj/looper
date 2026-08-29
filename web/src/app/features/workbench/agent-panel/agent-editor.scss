@@ -193,3 +193,29 @@
   .input { flex: 1; min-width: 0; }
   .btn { flex: none; }
 }
+
+/* Trigger mode: schedule vs events — one or the other */
+.trigger-modes {
+  display: flex;
+  gap: 12px;
+}
+
+.trigger-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+
+  input { display: none; }
+  .trigger-title { font-size: 13.5px; font-weight: 600; }
+
+  &.selected {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+}

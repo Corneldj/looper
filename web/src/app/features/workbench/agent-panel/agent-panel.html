@@ -45,7 +45,7 @@
             @if (agent.isRunning) {
               <span class="chip chip-green"><span class="pulse-dot"></span>Running</span>
             } @else if (agent.enabled) {
-              <span class="chip chip-accent">Scheduled</span>
+              <span class="chip chip-accent">{{ agent.triggerMode === 'Event' ? 'Listening' : 'Scheduled' }}</span>
             } @else {
               <span class="chip chip-neutral">Paused</span>
             }
@@ -57,7 +57,9 @@
           <span class="dot">·</span>
           <span>{{ effortLabel(agent.effort) }} effort</span>
           <span class="dot">·</span>
-          <span>{{ formatInterval(agent.intervalMinutes) }}</span>
+          <span [title]="agent.triggerMode === 'Event' ? 'Listens for: ' + (agent.triggerTopics || '') : ''">{{
+            agent.triggerMode === 'Event' ? '⚡ on events' : formatInterval(agent.intervalMinutes)
+          }}</span>
           <span class="dot">·</span>
           <span>{{ agent.resourceCount }} resources</span>
           <span class="dot">·</span>

@@ -12,7 +12,10 @@ public enum RunStatus
 public enum RunTrigger
 {
     Scheduled,
-    Manual
+    Manual,
+
+    /// <summary>Started by the event dispatcher — the triggering events land in the run's prompt.</summary>
+    Event
 }
 
 /// <summary>One loop iteration of an agent, with full cost/usage accounting.</summary>
@@ -36,6 +39,9 @@ public class AgentRun
 
     /// <summary>The run raised a User Action Request — the loop is waiting on the human. Not a failure.</summary>
     public bool ActionRequested { get; set; }
+
+    /// <summary>Event-chain depth this run sits at (0 = not event-triggered); brakes event cycles.</summary>
+    public int EventDepth { get; set; }
 
     /// <summary>Snapshot of the agent's dry-run flag at trigger time; simulated cost stays out of delivery metrics.</summary>
     public bool DryRun { get; set; }

@@ -15,6 +15,7 @@ public sealed class AgentRunCoordinator(
     SimulatedAgentExecutor simulatedExecutor,
     TestingActionRunner testingActionRunner,
     ReviewRunner reviewRunner,
+    EventDispatcher eventDispatcher,
     IOptions<LooperOptions> options,
     ILogger<AgentRunCoordinator> logger)
 {
@@ -37,7 +38,8 @@ public sealed class AgentRunCoordinator(
     public IReadOnlyCollection<Guid> RunningAgentIds => [.. _activeByAgent.Keys];
 
     /// <summary>Starts a run for the agent unless one is already active. Returns the new run id, or null when busy.</summary>
-    public async Task<Guid?> TriggerRunAsync(Guid agentId, RunTrigger trigger, CancellationToken cancellationToken = default)
+    public async Task<Guid?> TriggerRunAsync(Guid agentId, RunTrigger trigger, CancellationToken cancellationToken = default,
+        string? eventContext = null, int eventDepth = 0)
     {
         var active = new ActiveRun { RunId = Guid.NewGuid() };
         if (!_activeByAgent.TryAdd(agentId, active)) return null;
@@ -62,7 +64,8 @@ public sealed class AgentRunCoordinator(
                 Status = RunStatus.Running,
                 StartedAtUtc = DateTime.UtcNow,
                 Model = agent.Model,
-                DryRun = agent.DryRun
+                DryRun = agent.DryRun,
+                EventDepth = eventDepth
             };
             db.Runs.Add(run);
             await db.SaveChangesAsync(cancellationToken);
@@ -87,7 +90,7 @@ public sealed class AgentRunCoordinator(
 
             // Detach the agent graph from the scoped context; execution runs on its own contexts.
             var resources = agent.Resources.ToList();
-            _ = Task.Run(() => ExecuteAsync(agent, resources, active, userResponses), CancellationToken.None);
+            _ = Task.Run(() => ExecuteAsync(agent, resources, active, userResponses, eventContext, eventDepth), CancellationToken.None);
             return active.RunId;
         }
         catch
@@ -106,7 +109,7 @@ public sealed class AgentRunCoordinator(
     }
 
     private async Task ExecuteAsync(LoopAgent agent, IReadOnlyList<Resource> resources, ActiveRun active,
-        string? userResponses = null)
+        string? userResponses = null, string? eventContext = null, int eventDepth = 0)
     {
         var runId = active.RunId;
         RunLogWriter log = (level, message) => AppendLogAsync(runId, level, message);
@@ -132,7 +135,8 @@ public sealed class AgentRunCoordinator(
                 timeoutCts.Token, active.UserCancellation.Token);
 
             var executor = agent.DryRun ? (IAgentExecutor)simulatedExecutor : cliExecutor;
-            var context = new AgentExecutionContext(agent, resources, runId, UserResponses: userResponses);
+            var context = new AgentExecutionContext(agent, resources, runId,
+                UserResponses: userResponses, TriggerEvents: eventContext);
 
             AgentExecutionOutcome outcome;
             try
@@ -185,6 +189,7 @@ public sealed class AgentRunCoordinator(
             }
 
             await FinalizeAsync(runId, agent.Id, outcome, testResults, review);
+            await RaiseCompletionEventAsync(agent, runId, outcome.Success, eventDepth);
         }
         catch (Exception ex)
         {
@@ -323,6 +328,25 @@ public sealed class AgentRunCoordinator(
 
     private static string Truncate(string value, int max) =>
         value.Length <= max ? value : value[..max] + "…";
+
+    /// <summary>The deterministic backbone of the event system: every finished run announces itself.</summary>
+    private async Task RaiseCompletionEventAsync(LoopAgent agent, Guid runId, bool succeeded, int eventDepth)
+    {
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            await eventDispatcher.RaiseAsync(
+                db,
+                EventDispatcher.CompletionTopic(agent.Name, succeeded),
+                $"Agent '{agent.Name}' run {(succeeded ? "succeeded" : "failed")}. Run id: {runId}."
+                    + (agent.DryRun ? " (dry run)" : ""),
+                EventSource.Harness, agent.Id, runId, eventDepth, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not raise completion event for run {RunId}", runId);
+        }
+    }
 
     private async Task FinalizeAsync(Guid runId, Guid agentId, AgentExecutionOutcome outcome,
         (string ResultsJson, bool AllPassed)? testResults, ReviewInfo review)

@@ -20,6 +20,14 @@ public sealed class UpdateAgentValidator : AbstractValidator<UpdateAgentCommand>
         RuleFor(c => c.Request.IntervalMinutes).InclusiveBetween(1, 10080);
         RuleFor(c => c.Request.MaxTurns).InclusiveBetween(1, 250);
         RuleFor(c => c.Request.AutonomyLevel).InclusiveBetween(1, 4);
+        RuleFor(c => c.Request.TriggerTopics)
+            .Must(t => Looper.Api.Infrastructure.Execution.EventDispatcher.ParsePatterns(t).Count > 0)
+            .When(c => c.Request.TriggerMode == Looper.Api.Domain.TriggerMode.Event)
+            .WithMessage("An event-triggered agent needs at least one topic pattern to listen for.")
+            .Must(t => Looper.Api.Infrastructure.Execution.EventDispatcher.ParsePatterns(t)
+                .All(Looper.Api.Infrastructure.Execution.EventDispatcher.IsValidPattern))
+            .When(c => c.Request.TriggerMode == Looper.Api.Domain.TriggerMode.Event)
+            .WithMessage("Topic patterns are dotted lowercase keys, optionally ending in '.*' (e.g. 'agent.docs-gardener.*').");
         RuleFor(c => c.Request.MaxBudgetUsd).GreaterThan(0).When(c => c.Request.MaxBudgetUsd.HasValue);
     }
 }

@@ -11,6 +11,8 @@ public sealed record AgentSummaryDto(
     string Model,
     EffortLevel Effort,
     int IntervalMinutes,
+    TriggerMode TriggerMode,
+    string? TriggerTopics,
     bool Enabled,
     bool DryRun,
     int AutonomyLevel,
@@ -29,6 +31,8 @@ public sealed record AgentDetailDto(
     string Model,
     EffortLevel Effort,
     int IntervalMinutes,
+    TriggerMode TriggerMode,
+    string? TriggerTopics,
     bool Enabled,
     bool DryRun,
     int AutonomyLevel,
@@ -56,6 +60,8 @@ public sealed record SaveAgentRequest(
     string Model,
     EffortLevel Effort,
     int IntervalMinutes,
+    TriggerMode TriggerMode,
+    string? TriggerTopics,
     int MaxTurns,
     decimal? MaxBudgetUsd,
     string? WorkingDirectory,
@@ -80,6 +86,8 @@ public static class AgentMapper
         agent.Model,
         agent.Effort,
         agent.IntervalMinutes,
+        agent.TriggerMode,
+        agent.TriggerTopics,
         agent.Enabled,
         agent.DryRun,
         agent.AutonomyLevel,
@@ -99,6 +107,8 @@ public static class AgentMapper
         agent.Model,
         agent.Effort,
         agent.IntervalMinutes,
+        agent.TriggerMode,
+        agent.TriggerTopics,
         agent.Enabled,
         agent.DryRun,
         agent.AutonomyLevel,
@@ -124,6 +134,10 @@ public static class AgentMapper
         agent.Name = request.Name.Trim();
         agent.Description = request.Description.Trim();
         agent.AutonomyLevel = Math.Clamp(request.AutonomyLevel, 1, 4);
+        agent.TriggerMode = request.TriggerMode;
+        agent.TriggerTopics = request.TriggerMode == TriggerMode.Event
+            ? string.Join("\n", Looper.Api.Infrastructure.Execution.EventDispatcher.ParsePatterns(request.TriggerTopics))
+            : null; // scheduled agents carry no topics — one trigger or the other, never both
         agent.Prompt = request.Prompt;
         agent.Model = request.Model.Trim();
         agent.Effort = request.Effort;

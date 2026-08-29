@@ -13,6 +13,8 @@ const fakeAgent: AgentSummaryDto = {
   model: 'claude-opus-5',
   effort: 'High',
   intervalMinutes: 60,
+  triggerMode: 'Scheduled',
+  triggerTopics: null,
   enabled: true,
   dryRun: false,
   autonomyLevel: 3,

@@ -40,6 +40,7 @@ public sealed class AgentRunCoordinatorTests : IDisposable
             new SimulatedAgentExecutor(),
             new TestingActionRunner(looperOptions),
             new ReviewRunner(looperOptions, NullLogger<ReviewRunner>.Instance),
+            new EventDispatcher(NullLogger<EventDispatcher>.Instance),
             looperOptions,
             NullLogger<AgentRunCoordinator>.Instance);
     }

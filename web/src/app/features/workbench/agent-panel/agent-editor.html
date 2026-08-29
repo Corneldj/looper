@@ -4,7 +4,7 @@
       <div>
         <h2>{{ agent() ? 'Edit agent' : 'New loop agent' }}</h2>
         <p class="modal-subtitle">
-          {{ agent() ? 'Adjust how this loop behaves on its next iteration.' : 'Define a loop that wakes on a schedule and works its prompt.' }}
+          {{ agent() ? 'Adjust how this loop behaves on its next iteration.' : 'Define a loop that wakes on a schedule — or on events — and works its prompt.' }}
         </p>
       </div>
       <button type="button" class="icon-btn" title="Close" (click)="cancel()">✕</button>
@@ -53,6 +53,32 @@
     <section class="editor-section">
       <span class="section-label">Loop</span>
 
+      <div class="field">
+        <label>Starts</label>
+        <div class="trigger-modes">
+          <label class="trigger-option" [class.selected]="form.triggerMode === 'Scheduled'">
+            <input type="radio" name="trigger-mode" [checked]="form.triggerMode === 'Scheduled'"
+                   (change)="form.triggerMode = 'Scheduled'" />
+            <span class="trigger-title">⏱ On a schedule</span>
+            <span class="hint">Fires every N minutes.</span>
+          </label>
+          <label class="trigger-option" [class.selected]="form.triggerMode === 'Event'">
+            <input type="radio" name="trigger-mode" [checked]="form.triggerMode === 'Event'"
+                   (change)="form.triggerMode = 'Event'" />
+            <span class="trigger-title">⚡ On events</span>
+            <span class="hint">Fires when a matching event is raised. Never also scheduled.</span>
+          </label>
+        </div>
+      </div>
+
+      @if (form.triggerMode === 'Event') {
+        <div class="field">
+          <label for="agent-topics">Listens for</label>
+          <textarea id="agent-topics" class="textarea mono" rows="3" [(ngModel)]="form.triggerTopics"
+                    placeholder="prd.approved&#10;agent.docs-gardener.*"></textarea>
+          <span class="hint">One topic pattern per line — exact, or a prefix ending in “.*”. Every finished run raises agent.&lt;name&gt;.succeeded / .failed automatically, so loops can chain.</span>
+        </div>
+      } @else {
       <div class="form-row">
         <div class="field">
           <label for="agent-interval">Interval (minutes)</label>
@@ -70,6 +96,13 @@
           <input id="agent-max-turns" class="input num" type="number" min="1" [(ngModel)]="form.maxTurns" />
         </div>
       </div>
+      }
+      @if (form.triggerMode === 'Event') {
+        <div class="field">
+          <label for="agent-max-turns-e">Max turns</label>
+          <input id="agent-max-turns-e" class="input num" type="number" min="1" [(ngModel)]="form.maxTurns" />
+        </div>
+      }
     </section>
 
     <section class="editor-section">

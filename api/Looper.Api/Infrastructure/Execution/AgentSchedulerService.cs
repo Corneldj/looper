@@ -8,6 +8,7 @@ namespace Looper.Api.Infrastructure.Execution;
 public sealed class AgentSchedulerService(
     IDbContextFactory<LooperDbContext> dbFactory,
     AgentRunCoordinator coordinator,
+    EventDispatcher eventDispatcher,
     IOptions<LooperOptions> options,
     ILogger<AgentSchedulerService> logger) : BackgroundService
 {
@@ -34,8 +35,11 @@ public sealed class AgentSchedulerService(
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var now = DateTime.UtcNow;
 
+        // The scheduler serves ONLY schedule-triggered agents; event-triggered ones are
+        // started exclusively by the event pump below. One or the other — never both.
         var dueAgents = await db.Agents
-            .Where(a => a.Enabled && (a.NextRunAtUtc == null || a.NextRunAtUtc <= now))
+            .Where(a => a.Enabled && a.TriggerMode == TriggerMode.Scheduled
+                && (a.NextRunAtUtc == null || a.NextRunAtUtc <= now))
             .Select(a => new { a.Id, a.Name, a.IntervalMinutes })
             .ToListAsync(cancellationToken);
 
@@ -57,6 +61,10 @@ public sealed class AgentSchedulerService(
                 .ExecuteUpdateAsync(setters => setters.SetProperty(
                     a => a.NextRunAtUtc, now.AddMinutes(Math.Max(1, agent.IntervalMinutes))), cancellationToken);
         }
+
+        // Event pump: hand pending event deliveries to their listeners (also retries agents
+        // that were busy or user-action-parked when the event arrived).
+        await eventDispatcher.PumpAsync(db, coordinator, cancellationToken);
     }
 
     private static async Task<bool> WaitForNextTick(PeriodicTimer timer, CancellationToken token)

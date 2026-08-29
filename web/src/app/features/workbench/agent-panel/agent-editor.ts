@@ -10,6 +10,7 @@ import {
   EffortLevel,
   MODELS,
   SaveAgentRequest,
+  TriggerMode,
 } from '../../../core/models';
 
 interface AgentForm {
@@ -26,6 +27,8 @@ interface AgentForm {
   bypassPermissions: boolean;
   dryRun: boolean;
   autonomyLevel: number;
+  triggerMode: TriggerMode;
+  triggerTopics: string;
 }
 
 @Component({
@@ -93,6 +96,8 @@ export class AgentEditor implements OnInit {
     bypassPermissions: true,
     dryRun: true,
     autonomyLevel: 3,
+    triggerMode: 'Scheduled',
+    triggerTopics: '',
   };
 
   protected readonly resourceGroups = computed(() => {
@@ -126,13 +131,17 @@ export class AgentEditor implements OnInit {
         bypassPermissions: existing.bypassPermissions,
         dryRun: existing.dryRun,
         autonomyLevel: existing.autonomyLevel,
+        triggerMode: existing.triggerMode,
+        triggerTopics: existing.triggerTopics ?? '',
       };
       this.selectedIds.set(new Set(existing.resourceIds));
     }
   }
 
   protected get canSave(): boolean {
-    return this.form.name.trim().length > 0 && this.form.prompt.trim().length > 0;
+    if (this.form.name.trim().length === 0 || this.form.prompt.trim().length === 0) return false;
+    if (this.form.triggerMode === 'Event' && this.form.triggerTopics.trim().length === 0) return false;
+    return true;
   }
 
   protected setIntervalPreset(minutes: number): void {
@@ -191,6 +200,8 @@ export class AgentEditor implements OnInit {
       bypassPermissions: f.bypassPermissions,
       dryRun: f.dryRun,
       autonomyLevel: f.autonomyLevel,
+      triggerMode: f.triggerMode,
+      triggerTopics: f.triggerMode === 'Event' ? f.triggerTopics.trim() || null : null,
       resourceIds: [...this.selectedIds()],
     };
   }

@@ -19,7 +19,9 @@ export type EffortLevel = 'Low' | 'Medium' | 'High' | 'XHigh' | 'Max';
 
 export type RunStatus = 'Running' | 'Succeeded' | 'Failed' | 'Cancelled' | 'TimedOut';
 
-export type RunTrigger = 'Scheduled' | 'Manual';
+export type RunTrigger = 'Scheduled' | 'Manual' | 'Event';
+
+export type TriggerMode = 'Scheduled' | 'Event';
 
 /** Sentinel the API returns in place of stored secrets; sending it back preserves the stored value. */
 export const SECRET_SENTINEL = '__SECRET_UNCHANGED__';
@@ -111,6 +113,10 @@ export interface AgentSummaryDto {
   model: string;
   effort: EffortLevel;
   intervalMinutes: number;
+  /** How the loop starts — on its schedule or on events. One or the other, never both. */
+  triggerMode: TriggerMode;
+  /** For event mode: newline/comma-separated topic patterns (exact or trailing '.*'). */
+  triggerTopics: string | null;
   enabled: boolean;
   dryRun: boolean;
   /** 1 proposes · 2 sandboxed+approval · 3 autonomous+review · 4 autonomous+sampled audits. */
@@ -142,6 +148,8 @@ export interface SaveAgentRequest {
   model: string;
   effort: EffortLevel;
   intervalMinutes: number;
+  triggerMode: TriggerMode;
+  triggerTopics: string | null;
   maxTurns: number;
   maxBudgetUsd: number | null;
   workingDirectory: string | null;

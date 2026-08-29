@@ -9,7 +9,9 @@ public sealed record AgentExecutionContext(
     /// <summary>Set on review fix rounds: the reviewer's instructions appended to the loop prompt.</summary>
     string? FixInstructions = null,
     /// <summary>The user's answers to resolved action requests, delivered once on the next run.</summary>
-    string? UserResponses = null);
+    string? UserResponses = null,
+    /// <summary>For event-triggered runs: the triggering events (topic + payload), verbatim.</summary>
+    string? TriggerEvents = null);
 
 public sealed record AgentExecutionOutcome(
     bool Success,

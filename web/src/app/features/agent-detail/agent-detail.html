@@ -53,7 +53,10 @@
       </div>
       <div class="card meta-card">
         <span class="section-label">Cadence</span>
-        <span class="meta-value">{{ formatInterval(a.intervalMinutes) }}</span>
+        <span class="meta-value">{{ a.triggerMode === 'Event' ? '⚡ on events' : formatInterval(a.intervalMinutes) }}</span>
+        @if (a.triggerMode === 'Event' && a.triggerTopics) {
+          <span class="meta-hint mono">{{ a.triggerTopics }}</span>
+        }
       </div>
       <div class="card meta-card">
         <span class="section-label">Last run</span>

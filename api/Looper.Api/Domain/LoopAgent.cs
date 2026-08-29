@@ -9,6 +9,12 @@ public enum EffortLevel
     Max
 }
 
+public enum TriggerMode
+{
+    Scheduled,
+    Event
+}
+
 /// <summary>An agent definition that runs on a recurring loop via the Claude Agent SDK (headless CLI).</summary>
 public class LoopAgent
 {
@@ -24,6 +30,16 @@ public class LoopAgent
 
     public int IntervalMinutes { get; set; } = 60;
     public bool Enabled { get; set; }
+
+    /// <summary>How the loop starts: on its schedule, or on events. One or the other — never both.</summary>
+    public TriggerMode TriggerMode { get; set; } = TriggerMode.Scheduled;
+
+    /// <summary>
+    /// For event-triggered agents: newline/comma-separated topic patterns. A pattern is an exact
+    /// topic or a prefix wildcard ending in ".*" (e.g. "agent.docs-gardener.*"). Deterministic —
+    /// no regex, no fuzz.
+    /// </summary>
+    public string? TriggerTopics { get; set; }
 
     /// <summary>
     /// Autonomy is a dial, not a switch: 1 proposes only, 2 executes sandboxed with diff approval,

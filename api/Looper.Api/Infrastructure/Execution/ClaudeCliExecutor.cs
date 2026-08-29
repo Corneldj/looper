@@ -57,7 +57,7 @@ public sealed class ClaudeCliExecutor(
             UseShellExecute = false
         };
 
-        BuildArguments(startInfo.ArgumentList, agent, resources, additionalDirectories, contributions, context.FixInstructions, context.UserResponses);
+        BuildArguments(startInfo.ArgumentList, agent, resources, additionalDirectories, contributions, context.FixInstructions, context.UserResponses, context.TriggerEvents);
 
         foreach (var (key, value) in AgentWorkspace.ResolveEnvironment(resources))
         {
@@ -156,10 +156,10 @@ public sealed class ClaudeCliExecutor(
 
     private void BuildArguments(ICollection<string> args, LoopAgent agent, IReadOnlyList<Resource> resources,
         IReadOnlyList<string> additionalDirectories, IReadOnlyList<ResourceContribution> contributions,
-        string? fixInstructions, string? userResponses = null)
+        string? fixInstructions, string? userResponses = null, string? triggerEvents = null)
     {
         args.Add("-p");
-        args.Add(BuildPrompt(agent, resources, contributions, fixInstructions, userResponses));
+        args.Add(BuildPrompt(agent, resources, contributions, fixInstructions, userResponses, triggerEvents));
         args.Add("--output-format");
         args.Add("json");
         args.Add("--model");
@@ -217,7 +217,7 @@ public sealed class ClaudeCliExecutor(
 
     internal static string BuildPrompt(LoopAgent agent, IReadOnlyList<Resource> resources,
         IReadOnlyList<ResourceContribution> contributions, string? fixInstructions = null,
-        string? userResponses = null)
+        string? userResponses = null, string? triggerEvents = null)
     {
         var ragSections = resources
             .Where(r => r.Type == ResourceType.Rag)
@@ -234,6 +234,12 @@ public sealed class ClaudeCliExecutor(
         foreach (var actionResource in resources.Where(r => r.Type == ResourceType.UserAction))
         {
             extraSections.Add(BuildUserActionProtocol(ResourceConfig.Parse<UserActionConfig>(actionResource)));
+        }
+        if (!string.IsNullOrWhiteSpace(triggerEvents))
+        {
+            extraSections.Insert(0,
+                "TRIGGERING EVENT(S) — this iteration was started by the following event(s); they are the reason you are running, so address them directly:\n"
+                + triggerEvents);
         }
         if (!string.IsNullOrWhiteSpace(userResponses))
         {
@@ -283,7 +289,11 @@ public sealed class ClaudeCliExecutor(
         "-d \"{\\\"runId\\\":\\\"$LOOPER_RUN_ID\\\",\\\"url\\\":\\\"<the PR url>\\\",\\\"title\\\":\\\"<the PR title>\\\",\\\"repoPath\\\":\\\"$PWD\\\"}\". " +
         "If you are blocked on something only a human can decide or authorize, register an escalation and stop cleanly: " +
         "curl -s -X POST \"$LOOPER_API_URL/api/runs/$LOOPER_RUN_ID/escalate\" -H 'Content-Type: application/json' " +
-        "-d \"{\\\"reason\\\":\\\"<one sentence on what you need>\\\"}\". Never invent a PR url; only report PRs you actually opened.";
+        "-d \"{\\\"reason\\\":\\\"<one sentence on what you need>\\\"}\". Never invent a PR url; only report PRs you actually opened. " +
+        "You may also raise a named event on Looper's event bus to signal other loops (topics are dotted lowercase keys, e.g. docs.updated): " +
+        "curl -s -X POST \"$LOOPER_API_URL/api/events\" -H 'Content-Type: application/json' " +
+        "-d \"{\\\"runId\\\":\\\"$LOOPER_RUN_ID\\\",\\\"topic\\\":\\\"<topic>\\\",\\\"payload\\\":\\\"<what happened>\\\"}\". " +
+        "Raise events only for real, completed facts — never speculatively.";
 
     private static string? BuildAppendedSystemPrompt(IReadOnlyList<Resource> resources,
         IReadOnlyList<ResourceContribution> contributions) =>

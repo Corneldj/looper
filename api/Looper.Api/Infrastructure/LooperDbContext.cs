@@ -13,6 +13,8 @@ public class LooperDbContext(DbContextOptions<LooperDbContext> options) : DbCont
     public DbSet<AgentPullRequest> PullRequests => Set<AgentPullRequest>();
     public DbSet<ManagedWorkspace> Workspaces => Set<ManagedWorkspace>();
     public DbSet<UserActionRequest> UserActionRequests => Set<UserActionRequest>();
+    public DbSet<LooperEvent> Events => Set<LooperEvent>();
+    public DbSet<EventDelivery> EventDeliveries => Set<EventDelivery>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -34,6 +36,21 @@ public class LooperDbContext(DbContextOptions<LooperDbContext> options) : DbCont
             pr.HasIndex(p => p.Url);
             pr.HasIndex(p => p.Status);
             pr.HasOne(p => p.Agent).WithMany().HasForeignKey(p => p.AgentId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<LooperEvent>(evt =>
+        {
+            evt.Property(e => e.Topic).HasMaxLength(200);
+            evt.Property(e => e.Source).HasConversion<string>().HasMaxLength(20);
+            evt.HasIndex(e => e.CreatedAtUtc);
+        });
+
+        modelBuilder.Entity<EventDelivery>(delivery =>
+        {
+            delivery.Property(d => d.Status).HasConversion<string>().HasMaxLength(20);
+            delivery.HasIndex(d => new { d.AgentId, d.Status });
+            delivery.HasOne(d => d.Event).WithMany().HasForeignKey(d => d.EventId).OnDelete(DeleteBehavior.Cascade);
+            delivery.HasOne(d => d.Agent).WithMany().HasForeignKey(d => d.AgentId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<UserActionRequest>(request =>

@@ -23,7 +23,10 @@ public sealed class SetAgentEnabledHandler(LooperDbContext db, AgentRunCoordinat
         var agent = result.Agent;
         agent.Enabled = command.Enabled;
         // Enabling schedules an immediate run on the next scheduler tick; disabling unschedules.
-        agent.NextRunAtUtc = command.Enabled ? DateTime.UtcNow : null;
+        // Scheduled agents fire on the next tick when enabled; event agents wait for their events.
+        agent.NextRunAtUtc = command.Enabled && agent.TriggerMode == Domain.TriggerMode.Scheduled
+            ? DateTime.UtcNow
+            : null;
         agent.UpdatedAtUtc = DateTime.UtcNow;
         if (!command.Enabled) coordinator.CancelActiveRun(agent.Id);
 
