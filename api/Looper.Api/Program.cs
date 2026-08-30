@@ -42,6 +42,8 @@ builder.Services.AddSingleton<SimulatedAgentExecutor>();
 builder.Services.AddSingleton<TestingActionRunner>();
 builder.Services.AddSingleton<ReviewRunner>();
 builder.Services.AddSingleton<EventDispatcher>();
+builder.Services.AddSingleton<GraphContextService>();
+builder.Services.AddHostedService<GraphMaintenanceService>();
 builder.Services.AddSingleton<Looper.Api.Infrastructure.Workspaces.WorkspaceProvisioner>();
 builder.Services.AddHostedService<Looper.Api.Infrastructure.Workspaces.WorkspaceJanitorService>();
 builder.Services.AddSingleton<AgentRunCoordinator>();

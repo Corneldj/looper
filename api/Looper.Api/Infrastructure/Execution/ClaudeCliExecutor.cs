@@ -16,6 +16,7 @@ namespace Looper.Api.Infrastructure.Execution;
 public sealed class ClaudeCliExecutor(
     IOptions<LooperOptions> options,
     ResourceModuleRegistry moduleRegistry,
+    GraphContextService graphContext,
     ILogger<ClaudeCliExecutor> logger) : IAgentExecutor
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -27,7 +28,12 @@ public sealed class ClaudeCliExecutor(
         var resources = context.Resources;
 
         var (workingDirectory, additionalDirectories) = AgentWorkspace.Resolve(agent, resources);
-        var contributions = await CollectModuleContributions(resources, log);
+        var contributions = await CollectModuleContributions(agent, resources, log);
+
+        // Decoupled memory: retrieval happens harness-side, before the model sees anything —
+        // the run starts already knowing what the memory layer holds about its task.
+        var memoryContext = await graphContext.BuildPreambleSectionsAsync(
+            agent, resources, context.TriggerEvents, log, cancellationToken);
 
         // Dynamic Workspaces pools: the agent claims per-unit directories under each pool's
         // root at run time, so the root itself must exist and be reachable via --add-dir.
@@ -57,7 +63,7 @@ public sealed class ClaudeCliExecutor(
             UseShellExecute = false
         };
 
-        BuildArguments(startInfo.ArgumentList, agent, resources, additionalDirectories, contributions, context.FixInstructions, context.UserResponses, context.TriggerEvents);
+        BuildArguments(startInfo.ArgumentList, agent, resources, additionalDirectories, contributions, context.FixInstructions, context.UserResponses, context.TriggerEvents, memoryContext);
 
         foreach (var (key, value) in AgentWorkspace.ResolveEnvironment(resources))
         {
@@ -126,7 +132,7 @@ public sealed class ClaudeCliExecutor(
 
     /// <summary>Asks each dynamic module what its resources add to this run. A faulty module skips, never sinks, the run.</summary>
     private async Task<IReadOnlyList<ResourceContribution>> CollectModuleContributions(
-        IReadOnlyList<Resource> resources, RunLogWriter log)
+        LoopAgent agent, IReadOnlyList<Resource> resources, RunLogWriter log)
     {
         var contributions = new List<ResourceContribution>();
         foreach (var resource in resources.Where(r => r.Type == ResourceType.Custom && r.CustomTypeKey is not null))
@@ -139,7 +145,7 @@ public sealed class ClaudeCliExecutor(
 
             try
             {
-                var moduleContext = new ResourceModuleContext(resource.ConfigJson);
+                var moduleContext = new ResourceModuleContext(resource.ConfigJson, agent.Id, agent.Name);
                 module.PrepareRun(moduleContext);
                 contributions.Add(module.Contribute(moduleContext));
             }
@@ -156,10 +162,11 @@ public sealed class ClaudeCliExecutor(
 
     private void BuildArguments(ICollection<string> args, LoopAgent agent, IReadOnlyList<Resource> resources,
         IReadOnlyList<string> additionalDirectories, IReadOnlyList<ResourceContribution> contributions,
-        string? fixInstructions, string? userResponses = null, string? triggerEvents = null)
+        string? fixInstructions, string? userResponses = null, string? triggerEvents = null,
+        IReadOnlyList<string>? memoryContext = null)
     {
         args.Add("-p");
-        args.Add(BuildPrompt(agent, resources, contributions, fixInstructions, userResponses, triggerEvents));
+        args.Add(BuildPrompt(agent, resources, contributions, fixInstructions, userResponses, triggerEvents, memoryContext));
         args.Add("--output-format");
         args.Add("json");
         args.Add("--model");
@@ -217,7 +224,8 @@ public sealed class ClaudeCliExecutor(
 
     internal static string BuildPrompt(LoopAgent agent, IReadOnlyList<Resource> resources,
         IReadOnlyList<ResourceContribution> contributions, string? fixInstructions = null,
-        string? userResponses = null, string? triggerEvents = null)
+        string? userResponses = null, string? triggerEvents = null,
+        IReadOnlyList<string>? memoryContext = null)
     {
         var ragSections = resources
             .Where(r => r.Type == ResourceType.Rag)
@@ -234,6 +242,10 @@ public sealed class ClaudeCliExecutor(
         foreach (var actionResource in resources.Where(r => r.Type == ResourceType.UserAction))
         {
             extraSections.Add(BuildUserActionProtocol(ResourceConfig.Parse<UserActionConfig>(actionResource)));
+        }
+        if (memoryContext is { Count: > 0 })
+        {
+            extraSections.InsertRange(0, memoryContext);
         }
         if (!string.IsNullOrWhiteSpace(triggerEvents))
         {

@@ -346,6 +346,26 @@
         @case ('Custom') {
           @for (field of customFields(); track field.key) {
             <div class="field">
+              @if (field.key === 'curator' && isMemoryGraphType()) {
+                <label>{{ field.label }}</label>
+                <select
+                  class="select"
+                  [ngModel]="asText(customValues()['curator'])"
+                  (ngModelChange)="setCustomValue('curator', $event)"
+                >
+                  <option value="">— none: private graph, the agent maintains it itself —</option>
+                  @for (agentName of agentNames(); track agentName) {
+                    <option [value]="agentName">{{ agentName }}</option>
+                  }
+                </select>
+                <span class="hint">{{ field.hint }}</span>
+                @if (asText(customValues()['curator'])) {
+                  <span class="hint"
+                    >Point the curator’s event trigger at <span class="mono">{{ curationTopic() }}</span> — Looper
+                    raises it when the inbox backs up, facts compete, or the graph breaks.</span
+                  >
+                }
+              } @else {
               @switch (field.kind) {
                 @case ('Boolean') {
                   <label class="custom-switch-row">
@@ -430,6 +450,7 @@
               }
               @if (field.hint && field.kind !== 'Password') {
                 <span class="hint">{{ field.hint }}</span>
+              }
               }
             </div>
           }

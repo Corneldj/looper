@@ -46,6 +46,11 @@ export class ResourcePanel implements OnInit {
     })).filter(group => group.resources.length > 0);
   });
 
+  /** Infrastructure view of a graph resource (curator + health), when it is one. */
+  graphFor(resourceId: string) {
+    return this.store.graphs().find(g => g.resourceId === resourceId);
+  }
+
   ngOnInit(): void {
     this.store.load();
     this.store.loadTypes();

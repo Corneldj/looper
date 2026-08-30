@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# loopergraph v1
+# loopergraph v2
 """Looper graph toolkit — the read/write path for Looper's graph resources.
 
 Seeded into every graph storage folder by Looper. Self-contained, stdlib-only.
@@ -8,6 +8,12 @@ ce/vectorgraph.py, ce/execgraph.py): typed edges from a controlled ontology,
 bi-temporal validity (invalidate, never delete), vector entry with graph
 expansion, and a validated execution graph.
 
+v2 makes a graph safe to run as shared infrastructure across parallel loops:
+mutations take an advisory file lock; consumers contribute through an
+append-only inbox (`remember`) that a curator merges (`inbox`, `inbox-merge`,
+`inbox-reject`); recall logs usage telemetry; `health` reports what needs
+curation and `decay` mechanically down-weights facts nobody uses.
+
 Run from the graph folder (or pass --dir). `python3 loopergraph.py help` lists
 commands; the README.md next to this file carries the protocol.
 """
@@ -15,6 +21,7 @@ commands; the README.md next to this file carries the protocol.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
 import os
@@ -23,6 +30,11 @@ import sys
 import tempfile
 import zlib
 from datetime import datetime, timezone
+
+try:
+    import fcntl  # POSIX advisory locking; absent on Windows
+except ImportError:
+    fcntl = None
 
 FOREVER = "9999-12-31T00:00:00Z"
 _TOKEN = re.compile(r"[a-z0-9]+")
@@ -68,6 +80,24 @@ class Store:
         self.edges_path = os.path.join(root, "edges.jsonl")
         self.episodes_path = os.path.join(root, "episodes.jsonl")
         self.exec_path = os.path.join(root, "execution.json")
+        self.inbox_path = os.path.join(root, "inbox")
+        self.archive_path = os.path.join(root, "inbox", "archived")
+        self.usage_path = os.path.join(root, "usage.jsonl")
+        self.lock_path = os.path.join(root, ".graph.lock")
+
+    @contextlib.contextmanager
+    def lock(self):
+        """Advisory exclusive lock so parallel loops sharing this graph never interleave a
+        read-modify-write. Held only for the duration of one command's mutation."""
+        if fcntl is None:
+            yield
+            return
+        with open(self.lock_path, "w") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle, fcntl.LOCK_UN)
 
     # -- io helpers --------------------------------------------------------
 
@@ -84,7 +114,7 @@ class Store:
                 try:
                     rows.append(json.loads(line))
                 except json.JSONDecodeError:
-                    print(f"warning: {os.path.basename(path)}:{i} is not valid JSON; skipped")
+                    print(f"warning: {os.path.basename(path)}:{i} is not valid JSON; skipped", file=sys.stderr)
         return rows
 
     @staticmethod
@@ -193,6 +223,66 @@ class Store:
         episode = {"id": f"ep{len(rows) + 1:05d}", "time": now_iso(), "text": text.strip()}
         self._append_jsonl(self.episodes_path, episode)
         return episode
+
+    # -- inbox: one file per contribution, so parallel writers never collide ---
+
+    def inbox_add(self, text: str, kind: str, agent: str | None, run: str | None) -> dict:
+        os.makedirs(self.inbox_path, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+        item_id = f"in-{stamp}-{os.urandom(3).hex()}"
+        item = {"id": item_id, "kind": kind, "text": text.strip(),
+                "agent": agent, "run": run, "created": now_iso()}
+        self._write_atomic(os.path.join(self.inbox_path, f"{item_id}.json"),
+                           json.dumps(item, ensure_ascii=False, indent=2) + "\n")
+        return item
+
+    def inbox_pending(self) -> list[dict]:
+        if not os.path.isdir(self.inbox_path):
+            return []
+        items = []
+        for name in sorted(os.listdir(self.inbox_path)):
+            if not name.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(self.inbox_path, name), encoding="utf-8") as f:
+                    items.append(json.load(f))
+            except (json.JSONDecodeError, OSError):
+                print(f"warning: inbox/{name} is unreadable; skipped", file=sys.stderr)
+        return items
+
+    def inbox_archive(self, item_id: str, verdict: str, reason: str | None = None) -> dict:
+        source = os.path.join(self.inbox_path, f"{item_id}.json")
+        if not os.path.exists(source):
+            fail(f"no pending inbox item '{item_id}' — run `inbox` to list them")
+        with open(source, encoding="utf-8") as f:
+            item = json.load(f)
+        item["verdict"] = verdict
+        item["resolved"] = now_iso()
+        if reason:
+            item["reason"] = reason
+        os.makedirs(self.archive_path, exist_ok=True)
+        self._write_atomic(os.path.join(self.archive_path, f"{item_id}.json"),
+                           json.dumps(item, ensure_ascii=False, indent=2) + "\n")
+        os.unlink(source)
+        return item
+
+    # -- usage telemetry: recall/neighbors hits, appended best-effort ---------
+
+    def log_usage(self, command: str, query: str, edge_ids: list[str]) -> None:
+        try:
+            self._append_jsonl(self.usage_path, {
+                "time": now_iso(), "cmd": command, "query": query[:200], "hits": edge_ids[:20],
+            })
+        except OSError:
+            pass  # telemetry must never break a read
+
+    def last_used(self) -> dict[str, str]:
+        used: dict[str, str] = {}
+        for row in self._read_jsonl(self.usage_path):
+            for edge_id in row.get("hits", []):
+                if row.get("time", "") > used.get(edge_id, ""):
+                    used[edge_id] = row["time"]
+        return used
 
 
 def edge_text(e: dict) -> str:
@@ -331,6 +421,103 @@ def exec_unblocked(data: dict) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Health and mechanical maintenance — the deterministic side of curation.
+# ---------------------------------------------------------------------------
+
+def compute_health(store: Store, stale_days: int = 30) -> dict:
+    """Everything a curator (or the Looper janitor) needs to decide whether this
+    graph needs attention. Pure report — never mutates."""
+    now = now_iso()
+    nodes = store.nodes()
+    edges = store.edges()
+    current = [e for e in edges if store.true_at(e, now)]
+    episodes = store._read_jsonl(store.episodes_path)
+    pending = store.inbox_pending()
+    used = store.last_used()
+    usage_rows = store._read_jsonl(store.usage_path)
+
+    # Competing facts: several currently-true objects for one (subject, edge type).
+    # Sometimes legitimate (a service `uses` many libraries) — the curator judges.
+    by_key: dict[tuple[str, str], list[str]] = {}
+    for e in current:
+        by_key.setdefault((e["src"], e["etype"]), []).append(e["dst"])
+    competing = [
+        {"src": src, "etype": etype, "dsts": sorted(set(dsts))}
+        for (src, etype), dsts in sorted(by_key.items())
+        if len(set(dsts)) > 1
+    ]
+
+    horizon = datetime.now(timezone.utc).timestamp() - stale_days * 86400
+    horizon_iso = datetime.fromtimestamp(horizon, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    stale = [e["id"] for e in current
+             if used.get(e["id"], e["t_created"]) < horizon_iso]
+
+    problems: list[str] = []
+    ontology = store.ontology()
+    for e in current:
+        for endpoint in (e["src"], e["dst"]):
+            if endpoint not in nodes:
+                problems.append(f"edge {e['id']} references unknown node '{endpoint}'")
+        if ontology and e["etype"] not in ontology:
+            problems.append(f"edge {e['id']} uses edge type '{e['etype']}' missing from ontology.json")
+    if os.path.exists(store.exec_path):
+        try:
+            problems.extend(exec_validate(exec_load(store)))
+        except (json.JSONDecodeError, OSError) as ex:
+            problems.append(f"execution.json unreadable: {ex}")
+
+    oldest_hours = 0.0
+    if pending:
+        oldest = min(p.get("created", now) for p in pending)
+        try:
+            delta = datetime.now(timezone.utc) - datetime.strptime(oldest, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            oldest_hours = round(delta.total_seconds() / 3600, 1)
+        except ValueError:
+            pass
+
+    return {
+        "tool_version": 2,
+        "checked": now,
+        "nodes": len(nodes),
+        "facts_current": len(current),
+        "facts_total": len(edges),
+        "episodes": len(episodes),
+        "inbox_pending": len(pending),
+        "inbox_oldest_hours": oldest_hours,
+        "competing_count": len(competing),
+        "competing": competing[:10],
+        "stale_count": len(stale),
+        "stale_days": stale_days,
+        "usage_events": len(usage_rows),
+        "problem_count": len(problems),
+        "problems": problems[:20],
+    }
+
+
+def decay_confidence(store: Store, days: int, factor: float, floor: float) -> int:
+    """Down-weight currently-true facts nothing has recalled in `days`. Mechanical,
+    deterministic, floor-bounded — decayed facts stay retrievable, just ranked lower."""
+    now = now_iso()
+    used = store.last_used()
+    horizon = datetime.now(timezone.utc).timestamp() - days * 86400
+    horizon_iso = datetime.fromtimestamp(horizon, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rows = store.edges()
+    decayed = 0
+    for e in rows:
+        if not store.true_at(e, now):
+            continue
+        if used.get(e["id"], e["t_created"]) >= horizon_iso:
+            continue
+        lowered = max(floor, round(e["confidence"] * factor, 3))
+        if lowered < e["confidence"]:
+            e["confidence"] = lowered
+            decayed += 1
+    if decayed:
+        store._write_jsonl(store.edges_path, rows)
+    return decayed
+
+
+# ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
 
@@ -376,6 +563,29 @@ def main() -> None:
     p = sub.add_parser("recall", help="fuzzy query: vector entry, graph expansion, validity filter")
     p.add_argument("query"); p.add_argument("--at"); p.add_argument("-k", type=int, default=8)
 
+    p = sub.add_parser("remember", help="drop a contribution in the inbox for the curator to merge")
+    p.add_argument("text")
+    p.add_argument("--kind", default="note", choices=["note", "lesson", "episode", "proposal"])
+    p.add_argument("--agent", help="who contributed it"); p.add_argument("--run", help="originating run id")
+
+    p = sub.add_parser("inbox", help="pending contributions awaiting curation")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("inbox-merge", help="archive an inbox item as merged (extract its facts FIRST)")
+    p.add_argument("id")
+
+    p = sub.add_parser("inbox-reject", help="archive an inbox item without merging")
+    p.add_argument("id"); p.add_argument("--reason", default="")
+
+    p = sub.add_parser("health", help="curation report: inbox, competing facts, stale facts, problems")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--stale-days", type=int, default=30)
+
+    p = sub.add_parser("decay", help="down-weight facts unused for N days (mechanical, floor-bounded)")
+    p.add_argument("--days", type=int, default=30)
+    p.add_argument("--factor", type=float, default=0.9)
+    p.add_argument("--floor", type=float, default=0.25)
+
     sub.add_parser("status", help="store overview")
 
     p = sub.add_parser("exec-add", help="add a work item")
@@ -396,6 +606,16 @@ def main() -> None:
 
     store = Store(os.path.abspath(args.dir))
 
+    # Shared-infrastructure guard: any command that rewrites store files runs
+    # under the advisory lock so parallel loops can't interleave.
+    mutating = {"add-node", "add", "supersede", "invalidate", "episode", "decay",
+                "exec-add", "exec-start", "exec-done", "exec-block"}
+    lock = store.lock() if args.cmd in mutating else contextlib.nullcontext()
+    with lock:
+        dispatch(args, store)
+
+
+def dispatch(args: argparse.Namespace, store: Store) -> None:
     if args.cmd == "add-node":
         try:
             props = json.loads(args.props)
@@ -498,6 +718,54 @@ def main() -> None:
             print("nothing recalled — the graph may be empty, or nothing matches; try `status`")
         for score, e, entry, hops in results:
             print(f"[{score:.2f}] {edge_text(e)}  (via {entry}, hop {hops}, conf {e['confidence']}, {e['id']})")
+        if results:
+            store.log_usage("recall", args.query, [r[1]["id"] for r in results])
+
+    elif args.cmd == "remember":
+        item = store.inbox_add(args.text, args.kind, args.agent, args.run)
+        print(f"{item['id']} queued for curation ({item['kind']}). The graph's curator merges the inbox; "
+              "canonical facts stay consistent because only it writes them.")
+
+    elif args.cmd == "inbox":
+        pending = store.inbox_pending()
+        if args.json:
+            print(json.dumps(pending, ensure_ascii=False, indent=2))
+        elif not pending:
+            print("inbox is empty — nothing awaiting curation")
+        else:
+            for item in pending:
+                who = f" from {item['agent']}" if item.get("agent") else ""
+                print(f"{item['id']}  [{item['kind']}]{who}  {item['created']}\n  {item['text'][:160]}")
+
+    elif args.cmd == "inbox-merge":
+        item = store.inbox_archive(args.id, "merged")
+        print(f"{item['id']} archived as merged. If you haven't extracted its durable facts yet, do it now "
+              "(`add`/`episode` with --source noting this item).")
+
+    elif args.cmd == "inbox-reject":
+        item = store.inbox_archive(args.id, "rejected", args.reason or None)
+        print(f"{item['id']} archived as rejected" + (f": {args.reason}" if args.reason else "."))
+
+    elif args.cmd == "health":
+        report = compute_health(store, args.stale_days)
+        if args.json:
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+        else:
+            print(f"nodes {report['nodes']}  facts {report['facts_current']}/{report['facts_total']}  "
+                  f"episodes {report['episodes']}  usage events {report['usage_events']}")
+            print(f"inbox: {report['inbox_pending']} pending"
+                  + (f" (oldest {report['inbox_oldest_hours']}h)" if report['inbox_pending'] else ""))
+            print(f"competing facts: {report['competing_count']}   stale (> {report['stale_days']}d unused): {report['stale_count']}")
+            for c in report["competing"]:
+                print(f"  ? {c['src']} --{c['etype']}--> {', '.join(c['dsts'])}")
+            for p_msg in report["problems"]:
+                print(f"  problem: {p_msg}")
+            if not report["problems"]:
+                print("no structural problems")
+
+    elif args.cmd == "decay":
+        count = decay_confidence(store, args.days, args.factor, args.floor)
+        print(f"decayed {count} fact(s) unused for {args.days}+ days (factor {args.factor}, floor {args.floor})")
 
     elif args.cmd == "status":
         nodes, edges = store.nodes(), store.edges()

@@ -218,6 +218,35 @@ export interface RunDetailDto extends RunSummaryDto {
   logs: RunLogEntryDto[];
 }
 
+// ---------- Graph memory infrastructure ----------
+
+export interface GraphHealthDto {
+  checkedUtc: string;
+  nodes: number;
+  factsCurrent: number;
+  factsTotal: number;
+  episodes: number;
+  inboxPending: number;
+  competingCount: number;
+  staleCount: number;
+  problemCount: number;
+  usageEvents: number;
+}
+
+/** A graph resource seen as shared infrastructure: role wiring + the janitor's last health measurement. */
+export interface GraphStatusDto {
+  resourceId: string;
+  name: string;
+  typeKey: string;
+  path: string;
+  curator: string | null;
+  curationTopic: string;
+  autoLog: boolean;
+  preambleK: number;
+  inboxThreshold: number;
+  health: GraphHealthDto | null;
+}
+
 // ---------- Dashboard ----------
 
 export interface DashboardSummaryDto {

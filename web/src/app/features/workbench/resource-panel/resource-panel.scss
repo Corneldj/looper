@@ -71,7 +71,8 @@
 .resource-title {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap; // graph cards can carry several chips — wrap them under the name
+  gap: 4px 8px;
   min-width: 0;
 }
 

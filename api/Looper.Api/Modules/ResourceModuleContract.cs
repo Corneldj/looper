@@ -70,8 +70,16 @@ public sealed class ResourceModuleContext
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
     private readonly JsonElement _config;
 
-    public ResourceModuleContext(string configJson)
+    public ResourceModuleContext(string configJson) : this(configJson, null, null)
     {
+    }
+
+    /// <summary>Run-scoped context: the agent this contribution is for. Additive overload —
+    /// modules compiled against the older surface keep loading and see null/empty identity.</summary>
+    public ResourceModuleContext(string configJson, Guid? agentId, string? agentName)
+    {
+        AgentId = agentId;
+        AgentName = agentName ?? "";
         ConfigJson = configJson;
         try
         {
@@ -86,6 +94,12 @@ public sealed class ResourceModuleContext
     }
 
     public string ConfigJson { get; }
+
+    /// <summary>The agent this run belongs to; null outside a run (e.g. form rendering).</summary>
+    public Guid? AgentId { get; }
+
+    /// <summary>The agent's name; empty outside a run. Lets shared resources vary by consumer.</summary>
+    public string AgentName { get; }
 
     public T? GetConfig<T>() where T : class
     {

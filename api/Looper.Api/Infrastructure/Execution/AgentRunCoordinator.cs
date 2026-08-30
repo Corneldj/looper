@@ -190,6 +190,7 @@ public sealed class AgentRunCoordinator(
 
             await FinalizeAsync(runId, agent.Id, outcome, testResults, review);
             await RaiseCompletionEventAsync(agent, runId, outcome.Success, eventDepth);
+            if (!agent.DryRun) LogOutcomeToGraphInboxes(agent, resources, runId, outcome, review, log);
         }
         catch (Exception ex)
         {
@@ -330,6 +331,39 @@ public sealed class AgentRunCoordinator(
         value.Length <= max ? value : value[..max] + "…";
 
     /// <summary>The deterministic backbone of the event system: every finished run announces itself.</summary>
+    /// <summary>
+    /// Episodic memory without spending agent tokens: the harness drops each real run's outcome
+    /// into every attached memory graph that opted in (autoLog). The graph's curator folds these
+    /// into canonical episodes and facts on its next curation pass. Best-effort, never fatal.
+    /// </summary>
+    private void LogOutcomeToGraphInboxes(LoopAgent agent, IReadOnlyList<Resource> resources,
+        Guid runId, AgentExecutionOutcome outcome, ReviewInfo review, RunLogWriter log)
+    {
+        foreach (var (resource, path, _) in Modules.BuiltIn.GraphInfrastructure.AutoLogTargets(resources))
+        {
+            try
+            {
+                var summary = outcome.ResultText ?? outcome.ErrorMessage ?? "";
+                if (summary.Length > 400) summary = summary[..400] + "…";
+                var reviewNote = review.Passed switch
+                {
+                    true => $" Review: passed after {review.FixRounds} fix round(s).",
+                    false => " Review: FAILED.",
+                    null => ""
+                };
+                var text = $"Run {(outcome.Success ? "succeeded" : "FAILED")} " +
+                           $"({outcome.NumTurns} turns, {outcome.DurationMs / 1000}s, ${outcome.CostUsd:0.####})." +
+                           $"{reviewNote} {summary}".TrimEnd();
+                Modules.BuiltIn.GraphInfrastructure.WriteInboxItem(path, "episode", text, agent.Name, runId.ToString());
+                _ = log("info", $"Run outcome logged to '{resource.Name}' inbox.");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger.LogWarning(ex, "Could not log run outcome to graph inbox at {Path}", path);
+            }
+        }
+    }
+
     private async Task RaiseCompletionEventAsync(LoopAgent agent, Guid runId, bool succeeded, int eventDepth)
     {
         try

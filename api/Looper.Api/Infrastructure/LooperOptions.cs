@@ -30,4 +30,10 @@ public class LooperOptions
 
     /// <summary>Per-testing-action time limit.</summary>
     public int TestingActionTimeoutSeconds { get; set; } = 120;
+
+    /// <summary>Interpreter used for the graph toolkit (memory preambles, health reports).</summary>
+    public string PythonCommand { get; set; } = "python3";
+
+    /// <summary>How often graph health is measured and needs-curation events are raised.</summary>
+    public int GraphMaintenanceMinutes { get; set; } = 30;
 }

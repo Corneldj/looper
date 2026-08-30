@@ -210,12 +210,24 @@ public sealed class BuildWorkflowHandler(
            - WorkspacePool: {"rootPath":"/abs/path","provisioning":"blank|git-clone|copy-template","source":"…?","retentionDays":14,"maxWorkspaces":null}
            - AzureConnection / PatToken: credential configs — create ONLY with placeholder values and say so in your report; never invent real secrets.
            - Dynamic types: type "Custom" + customTypeKey "<TypeKey>"; configJson keys = the type's field keys.
-        3. Create an agent (a scheduled loop):
-           curl -s -X POST {{apiUrl}}/api/agents -d '{"name":"…","description":"…","prompt":"<the loop prompt>","model":"claude-opus-5|claude-sonnet-5|claude-haiku-4-5","effort":"Low|Medium|High","intervalMinutes":60,"maxTurns":25,"maxBudgetUsd":null,"workingDirectory":null,"allowedTools":null,"bypassPermissions":true,"dryRun":true,"autonomyLevel":2,"resourceIds":["<resource ids to attach>"]}'
+        3. Create an agent (a loop started on a schedule OR by events — one or the other):
+           curl -s -X POST {{apiUrl}}/api/agents -d '{"name":"…","description":"…","prompt":"<the loop prompt>","model":"claude-opus-5|claude-sonnet-5|claude-haiku-4-5","effort":"Low|Medium|High","intervalMinutes":60,"triggerMode":"Scheduled","triggerTopics":null,"maxTurns":25,"maxBudgetUsd":null,"workingDirectory":null,"allowedTools":null,"bypassPermissions":true,"dryRun":true,"autonomyLevel":2,"resourceIds":["<resource ids to attach>"]}'
+           For an event-driven loop: "triggerMode":"Event" and "triggerTopics":"topic.one\ntopic.prefix.*"
+           (every finished run raises agent.<name-slug>.succeeded/.failed; graph maintenance raises graph.<name-slug>.needs-curation).
         4. Update an agent (e.g. to attach more resources later): PUT {{apiUrl}}/api/agents/<id> with the same body shape.
         5. If the workflow genuinely needs a capability no existing type covers, you may commission
            a new resource type (this invokes another AI and takes minutes — use sparingly):
            curl -s -X POST {{apiUrl}}/api/resource-types/generate -d '{"description":"…"}'
+
+        THE SHARED MEMORY PATTERN (use it whenever several loops must stay aligned on standards,
+        decisions, or past work): create ONE memory-shaped graph resource (ContinuousVectorMemoryGraph,
+        KnowledgeGraph, or MemoryGraph as a Custom type) with config keys {"path":"/abs/path",
+        "curator":"<curator agent name>","autoLog":true} — then a dedicated CURATOR agent with
+        "triggerMode":"Event" and "triggerTopics":"graph.<resource-name-slug>.needs-curation", whose
+        prompt is to work the graph's inbox and health report (the harness injects the full curation
+        protocol automatically). Attach the graph to every consumer loop too: they get query access,
+        an automatic memory preamble, and an inbox to contribute to — but only the curator writes
+        canonical facts. Do NOT tell consumer loops to maintain the graph; the separation is the point.
 
         GOVERNANCE — non-negotiable:
         - Every agent you create: "dryRun": true and leave it DISABLED (never call the enabled endpoint).

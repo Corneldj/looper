@@ -15,6 +15,41 @@ namespace Looper.Api.Modules.BuiltIn;
 // commands, not a raw folder.
 // ============================================================================
 
+/// <summary>
+/// Role-aware protocol text for shared graphs. The same graph reads differently to a
+/// consumer (query + inbox contributions, canonical writes forbidden) than to its curator
+/// (sole writer: merge the inbox, resolve contradictions, decay). Search retrieves what the
+/// code does; the memory layer retrieves why — and stays consistent because one loop owns it.
+/// </summary>
+internal static class GraphProtocols
+{
+    internal static string Tool(string path) => $"python3 \"{path}/loopergraph.py\" --dir \"{path}\"";
+
+    internal static string Consumer(string label, string path, string env, GraphSharedConfig config,
+        string queryCrib, bool mayContribute) =>
+        $"SHARED {label} at {path} (also ${env}) — team memory owned by the curator loop '{config.Curator}'. " +
+        $"You CONSUME it: {Tool(path)} {queryCrib}. A MEMORY CONTEXT section retrieved from this graph may " +
+        "already be in this prompt; verify anything load-bearing with those commands. " +
+        (mayContribute
+            ? $"When you learn something durable (a decision, lesson, standard, or fix), contribute it: {Tool(path)} " +
+              "remember \"<text>\" --kind lesson --agent \"<your agent name>\" --run \"$LOOPER_RUN_ID\" — it lands in " +
+              "the curation inbox. "
+            : "It is READ-ONLY for you: query it, contribute nothing. ") +
+        "Do NOT add, supersede, invalidate, or hand-edit canonical graph files — only the curator writes them; " +
+        "that separation keeps memory consistent for every loop that shares it. Never store secrets in memory.";
+
+    internal static string Curator(string label, string path, string env, string extra) =>
+        $"YOU ARE THE CURATOR of the shared {label} at {path} (also ${env}). Executing loops query it and drop " +
+        "contributions into its inbox; you alone write canonical facts — keep them small, current, and trustworthy. " +
+        $"Each curation pass: (1) {Tool(path)} health — see what needs attention; (2) `inbox` — for every item, " +
+        "either extract its durable facts (`add`/`episode`/`supersede` with ontology edge types, `--source <item-id>`) " +
+        "then `inbox-merge <id>`, or `inbox-reject <id> --reason \"…\"`; (3) resolve the competing facts the health " +
+        "report lists — `supersede` what changed, `invalidate` what stopped being true, never delete history; " +
+        "(4) `decay --days 30` to mechanically down-weight facts nobody recalls. Keep the ontology vocabulary small: " +
+        "extend ontology.json only for a genuinely new relationship — synonym edge types make memory unqueryable. " +
+        extra + "Never store secrets in memory.";
+}
+
 public sealed class ContinuousVectorMemoryGraphModule : IResourceTypeModule
 {
     public string TypeKey => "ContinuousVectorMemoryGraph";
@@ -31,7 +66,8 @@ public sealed class ContinuousVectorMemoryGraphModule : IResourceTypeModule
             Hint: "Optional namespace when several agents share the store.", Placeholder: "default"),
         new("mcpUrl", "Vector store MCP URL", ResourceFieldKind.Text,
             Hint: "Optional http/sse MCP endpoint of a real vector database. Without it the agent uses the seeded file-based toolkit (lexical entry, honest about it).",
-            Placeholder: "http://localhost:8123/mcp")
+            Placeholder: "http://localhost:8123/mcp"),
+        .. GraphInfrastructure.SharedFields()
     ];
 
     private static readonly Dictionary<string, string> Ontology = new()
@@ -61,6 +97,8 @@ public sealed class ContinuousVectorMemoryGraphModule : IResourceTypeModule
 
         var collection = context.GetString("collection");
         var mcpUrl = context.GetString("mcpUrl");
+        var shared = GraphInfrastructure.SharedConfig(context);
+        var role = GraphInfrastructure.RoleOf(shared, context.AgentName);
 
         contribution.EnvironmentVariables["LOOPER_VECTOR_MEMORY_PATH"] = path;
         if (!string.IsNullOrWhiteSpace(collection))
@@ -69,17 +107,26 @@ public sealed class ContinuousVectorMemoryGraphModule : IResourceTypeModule
         }
         contribution.AdditionalDirectories.Add(path);
 
-        contribution.PromptSections.Add(
-            $"CONTINUOUS VECTOR MEMORY GRAPH at {path} (also $LOOPER_VECTOR_MEMORY_PATH). Your durable semantic memory " +
-            "across iterations; its README.md defines the protocol and command crib. Start every iteration with: " +
-            $"python3 \"{path}/loopergraph.py\" --dir \"{path}\" recall \"<what this iteration is about>\" " +
-            "and consult what comes back before acting. Record raw events with the `episode` command, then extract " +
-            "durable facts with `add <edge_type> <subject> <object> --source <episode-id>` using ONLY edge types " +
-            "from ontology.json. When a fact changes, use `supersede` — never edit or delete history; ask about the " +
-            "past with `recall --at YYYY-MM-DD`. Never store secrets in memory." +
-            (string.IsNullOrWhiteSpace(mcpUrl)
-                ? ""
-                : " A real vector store is also connected via MCP — prefer its tools for semantic search and storage, and keep the folder's episode log as the audit trail."));
+        var mcpNote = string.IsNullOrWhiteSpace(mcpUrl)
+            ? ""
+            : " A real vector store is also connected via MCP — prefer its tools for semantic search and storage, and keep the folder's episode log as the audit trail.";
+        contribution.PromptSections.Add(role switch
+        {
+            GraphRole.Consumer => GraphProtocols.Consumer("CONTINUOUS VECTOR MEMORY GRAPH", path,
+                "LOOPER_VECTOR_MEMORY_PATH", shared,
+                "recall \"<what this iteration is about>\" | neighbors <node> | history <node>", mayContribute: true) + mcpNote,
+            GraphRole.Curator => GraphProtocols.Curator("CONTINUOUS VECTOR MEMORY GRAPH", path,
+                "LOOPER_VECTOR_MEMORY_PATH",
+                "Fold raw inbox episodes into `episode` entries plus extracted facts. ") + mcpNote,
+            _ =>
+                $"CONTINUOUS VECTOR MEMORY GRAPH at {path} (also $LOOPER_VECTOR_MEMORY_PATH). Your durable semantic memory " +
+                "across iterations; its README.md defines the protocol and command crib. Start every iteration with: " +
+                $"python3 \"{path}/loopergraph.py\" --dir \"{path}\" recall \"<what this iteration is about>\" " +
+                "and consult what comes back before acting. Record raw events with the `episode` command, then extract " +
+                "durable facts with `add <edge_type> <subject> <object> --source <episode-id>` using ONLY edge types " +
+                "from ontology.json. When a fact changes, use `supersede` — never edit or delete history; ask about the " +
+                "past with `recall --at YYYY-MM-DD`. Never store secrets in memory." + mcpNote
+        });
 
         if (!string.IsNullOrWhiteSpace(mcpUrl))
         {
@@ -104,7 +151,8 @@ public sealed class KnowledgeGraphModule : IResourceTypeModule
             Hint: "Where the graph lives (typed nodes and edges, ontology-gated).",
             Placeholder: "/home/you/looper-memory/knowledge"),
         new("readOnly", "Read-only", ResourceFieldKind.Boolean,
-            Hint: "The agent may query the graph but never modify it.")
+            Hint: "The agent may query the graph but never modify it."),
+        .. GraphInfrastructure.SharedFields()
     ];
 
     private static readonly Dictionary<string, string> Ontology = new()
@@ -133,19 +181,29 @@ public sealed class KnowledgeGraphModule : IResourceTypeModule
         if (string.IsNullOrWhiteSpace(path)) return contribution;
 
         var readOnly = context.GetBool("readOnly");
+        var shared = GraphInfrastructure.SharedConfig(context);
+        var role = GraphInfrastructure.RoleOf(shared, context.AgentName);
 
         contribution.EnvironmentVariables["LOOPER_KNOWLEDGE_GRAPH_PATH"] = path;
         contribution.AdditionalDirectories.Add(path);
-        contribution.PromptSections.Add(
-            $"KNOWLEDGE GRAPH at {path} (also $LOOPER_KNOWLEDGE_GRAPH_PATH): typed domain facts; protocol in its README.md. " +
-            $"Query it before decisions that depend on domain facts: python3 \"{path}/loopergraph.py\" --dir \"{path}\" " +
-            "neighbors <entity> | path <a> <b> | missing <node_type> <edge_type> | recall \"<fuzzy question>\". " +
-            "Trust short paths over long ones — each hop multiplies uncertainty, and the tool prints per-path confidence." +
-            (readOnly
-                ? " This graph is READ-ONLY for you: query it, never modify it."
-                : " When you establish a durable fact, `add` it with an edge type from ontology.json (never invent " +
-                  "synonym types); when a fact stops being true, `supersede` or `invalidate` it — never delete. " +
-                  "Use canonical entity names: check `neighbors` for the existing node before minting a new id."));
+        contribution.PromptSections.Add(role switch
+        {
+            GraphRole.Consumer => GraphProtocols.Consumer("KNOWLEDGE GRAPH", path, "LOOPER_KNOWLEDGE_GRAPH_PATH",
+                shared, "neighbors <entity> | path <a> <b> | missing <node_type> <edge_type> | recall \"<fuzzy question>\" " +
+                "— trust short paths over long ones; the tool prints per-path confidence", mayContribute: !readOnly),
+            GraphRole.Curator => GraphProtocols.Curator("KNOWLEDGE GRAPH", path, "LOOPER_KNOWLEDGE_GRAPH_PATH",
+                "Use canonical entity names — check `neighbors` for the existing node before minting a new id. "),
+            _ =>
+                $"KNOWLEDGE GRAPH at {path} (also $LOOPER_KNOWLEDGE_GRAPH_PATH): typed domain facts; protocol in its README.md. " +
+                $"Query it before decisions that depend on domain facts: python3 \"{path}/loopergraph.py\" --dir \"{path}\" " +
+                "neighbors <entity> | path <a> <b> | missing <node_type> <edge_type> | recall \"<fuzzy question>\". " +
+                "Trust short paths over long ones — each hop multiplies uncertainty, and the tool prints per-path confidence." +
+                (readOnly
+                    ? " This graph is READ-ONLY for you: query it, never modify it."
+                    : " When you establish a durable fact, `add` it with an edge type from ontology.json (never invent " +
+                      "synonym types); when a fact stops being true, `supersede` or `invalidate` it — never delete. " +
+                      "Use canonical entity names: check `neighbors` for the existing node before minting a new id.")
+        });
 
         return contribution;
     }
@@ -164,7 +222,8 @@ public sealed class MemoryGraphModule : IResourceTypeModule
             Hint: "Where episodes and the facts extracted from them are stored.",
             Placeholder: "/home/you/looper-memory/episodes"),
         new("maxEpisodes", "Max episodes", ResourceFieldKind.Number,
-            Hint: "Optional soft cap — beyond it, fold old episodes' lessons into facts.", Placeholder: "unbounded")
+            Hint: "Optional soft cap — beyond it, fold old episodes' lessons into facts.", Placeholder: "unbounded"),
+        .. GraphInfrastructure.SharedFields()
     ];
 
     private static readonly Dictionary<string, string> Ontology = new()
@@ -192,20 +251,34 @@ public sealed class MemoryGraphModule : IResourceTypeModule
         if (string.IsNullOrWhiteSpace(path)) return contribution;
 
         var maxEpisodes = context.GetNumber("maxEpisodes");
+        var shared = GraphInfrastructure.SharedConfig(context);
+        var role = GraphInfrastructure.RoleOf(shared, context.AgentName);
 
         contribution.EnvironmentVariables["LOOPER_MEMORY_GRAPH_PATH"] = path;
         contribution.AdditionalDirectories.Add(path);
-        contribution.PromptSections.Add(
-            $"EPISODIC MEMORY GRAPH at {path} (also $LOOPER_MEMORY_GRAPH_PATH); protocol in its README.md. " +
-            $"Start each iteration with: python3 \"{path}/loopergraph.py\" --dir \"{path}\" recall \"<this iteration's task>\" " +
-            "to learn what earlier iterations did, decided and left open. End each iteration by recording one episode " +
-            "(`episode \"<what you did, why, outcome, open threads>\"`) and extracting its durable facts " +
-            "(`add did|decided|learned|left_open this-iteration <object> --source <episode-id>`). Episodes are " +
-            "immutable and append-only; when something a past iteration recorded stops being true, `invalidate` the " +
-            "fact — never rewrite the episode." +
-            (maxEpisodes is > 0
-                ? $" Soft cap: around {maxEpisodes:0} episodes, fold the oldest episodes' still-relevant lessons into facts before adding more."
-                : ""));
+        var capNote = maxEpisodes is > 0
+            ? $" Soft cap: around {maxEpisodes:0} episodes, fold the oldest episodes' still-relevant lessons into facts before adding more."
+            : "";
+        contribution.PromptSections.Add(role switch
+        {
+            GraphRole.Consumer => GraphProtocols.Consumer("EPISODIC MEMORY GRAPH", path, "LOOPER_MEMORY_GRAPH_PATH",
+                shared, "recall \"<this iteration's task>\" — what earlier iterations did, decided and left open", mayContribute: true) +
+                (shared.AutoLog
+                    ? " Your run's outcome is logged to the inbox automatically; `remember` only what the summary would miss."
+                    : " End each iteration with one `remember --kind episode` describing what you did, why, the outcome, and open threads."),
+            GraphRole.Curator => GraphProtocols.Curator("EPISODIC MEMORY GRAPH", path, "LOOPER_MEMORY_GRAPH_PATH",
+                "Fold inbox episodes into immutable `episode` entries plus extracted facts " +
+                "(`add did|decided|learned|left_open <who> <object> --source <episode-id>`); when a past record stops " +
+                "being true, `invalidate` the fact — never rewrite the episode. ") + capNote,
+            _ =>
+                $"EPISODIC MEMORY GRAPH at {path} (also $LOOPER_MEMORY_GRAPH_PATH); protocol in its README.md. " +
+                $"Start each iteration with: python3 \"{path}/loopergraph.py\" --dir \"{path}\" recall \"<this iteration's task>\" " +
+                "to learn what earlier iterations did, decided and left open. End each iteration by recording one episode " +
+                "(`episode \"<what you did, why, outcome, open threads>\"`) and extracting its durable facts " +
+                "(`add did|decided|learned|left_open this-iteration <object> --source <episode-id>`). Episodes are " +
+                "immutable and append-only; when something a past iteration recorded stops being true, `invalidate` the " +
+                "fact — never rewrite the episode." + capNote
+        });
 
         return contribution;
     }

@@ -2,6 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
+  GraphStatusDto,
   AgentBreakdownDto,
   ArchitectResultDto,
   ArchitectureMapDto,
@@ -51,6 +52,12 @@ export class ApiService {
     configJson: string;
   }): Observable<ResourceDto> {
     return this.http.post<ResourceDto>(`${API_BASE}/resources`, body);
+  }
+
+  // ---------- Graph memory infrastructure ----------
+
+  getGraphs(): Observable<GraphStatusDto[]> {
+    return this.http.get<GraphStatusDto[]>(`${API_BASE}/graphs`);
   }
 
   // ---------- Resource types (dynamic modules) ----------

@@ -141,7 +141,7 @@ public sealed class GraphWorkspaceTests : IDisposable
         var dir = Path.Combine(_root, "kg");
 
         Assert.True(File.Exists(Path.Combine(dir, "loopergraph.py")));
-        Assert.Contains("loopergraph v1", File.ReadAllText(Path.Combine(dir, "loopergraph.py")));
+        Assert.Contains("loopergraph v2", File.ReadAllText(Path.Combine(dir, "loopergraph.py")));
         var ontology = File.ReadAllText(Path.Combine(dir, "ontology.json"));
         Assert.Contains("depends_on", ontology);
         Assert.Contains("owned_by", ontology);
@@ -178,7 +178,7 @@ public sealed class GraphWorkspaceTests : IDisposable
         // An outdated toolkit is replaced by the shipped version.
         File.WriteAllText(Path.Combine(dir, "loopergraph.py"), "#!/usr/bin/env python3\n# loopergraph v0\n");
         module.PrepareRun(context);
-        Assert.Contains("loopergraph v1", File.ReadAllText(Path.Combine(dir, "loopergraph.py")));
+        Assert.Contains("loopergraph v2", File.ReadAllText(Path.Combine(dir, "loopergraph.py")));
     }
 }
 

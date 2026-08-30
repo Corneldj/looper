@@ -38,13 +38,16 @@ public sealed partial class EventDispatcher(ILogger<EventDispatcher> logger)
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
-    /// <summary>agent.&lt;name-slug&gt;.&lt;succeeded|failed&gt; — the stable key other loops chain off.</summary>
-    public static string CompletionTopic(string agentName, bool succeeded)
+    /// <summary>Topic-safe slug of a display name (agent, resource, …).</summary>
+    public static string Slug(string name, string fallback = "item")
     {
-        var slug = SlugPattern().Replace(agentName.Trim().ToLowerInvariant(), "-").Trim('-');
-        if (slug.Length == 0) slug = "agent";
-        return $"agent.{slug}.{(succeeded ? "succeeded" : "failed")}";
+        var slug = SlugPattern().Replace(name.Trim().ToLowerInvariant(), "-").Trim('-');
+        return slug.Length == 0 ? fallback : slug;
     }
+
+    /// <summary>agent.&lt;name-slug&gt;.&lt;succeeded|failed&gt; — the stable key other loops chain off.</summary>
+    public static string CompletionTopic(string agentName, bool succeeded) =>
+        $"agent.{Slug(agentName, "agent")}.{(succeeded ? "succeeded" : "failed")}";
 
     // ---------- raise ----------
 

@@ -36,7 +36,9 @@ public sealed class AgentRunCoordinatorTests : IDisposable
         var registry = new ResourceModuleRegistry(NullLogger<ResourceModuleRegistry>.Instance);
         return new AgentRunCoordinator(
             new Factory(_options),
-            new ClaudeCliExecutor(looperOptions, registry, NullLogger<ClaudeCliExecutor>.Instance),
+            new ClaudeCliExecutor(looperOptions, registry,
+                new GraphContextService(looperOptions, NullLogger<GraphContextService>.Instance),
+                NullLogger<ClaudeCliExecutor>.Instance),
             new SimulatedAgentExecutor(),
             new TestingActionRunner(looperOptions),
             new ReviewRunner(looperOptions, NullLogger<ReviewRunner>.Instance),

@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../../core/api.service';
+import { AgentsStore } from '../../../core/stores';
 import { FolderPicker } from '../../../shared/folder-picker/folder-picker';
 import {
   MODELS,
@@ -26,6 +27,21 @@ type McpTransport = 'stdio' | 'http' | 'sse';
 })
 export class ResourceEditor implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly agentsStore = inject(AgentsStore);
+
+  /** Memory-shaped graph types run as shared infrastructure; their `curator` field becomes an agent picker. */
+  private static readonly memoryGraphTypeKeys = ['ContinuousVectorMemoryGraph', 'KnowledgeGraph', 'MemoryGraph'];
+
+  readonly isMemoryGraphType = computed(() =>
+    ResourceEditor.memoryGraphTypeKeys.includes(this.typeDef()?.typeKey ?? ''));
+
+  readonly agentNames = computed(() => this.agentsStore.agents().map(a => a.name).sort());
+
+  /** The deterministic event topic Looper raises when this graph needs curation. */
+  readonly curationTopic = computed(() => {
+    const slug = this.name().trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'graph';
+    return `graph.${slug}.needs-curation`;
+  });
 
   /** Existing resource when editing; null when creating. */
   readonly resource = input<ResourceDto | null>(null);

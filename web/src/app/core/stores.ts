@@ -2,7 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { catchError, of, timer, switchMap } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService } from './api.service';
-import { AgentSummaryDto, ClaudeStatusDto, RESOURCE_TYPES, ResourceDto, ResourceTypeDto, UserActionDto } from './models';
+import { AgentSummaryDto, ClaudeStatusDto, GraphStatusDto, RESOURCE_TYPES, ResourceDto, ResourceTypeDto, UserActionDto } from './models';
 
 /** Holds the resource list shared by the workbench panels and agent editor. */
 @Injectable({ providedIn: 'root' })
@@ -10,11 +10,14 @@ export class ResourcesStore {
   private readonly api = inject(ApiService);
 
   readonly resources = signal<ResourceDto[]>([]);
+  /** Graph resources as infrastructure: curator wiring + last measured health, by resource id. */
+  readonly graphs = signal<GraphStatusDto[]>([]);
   readonly loaded = signal(false);
   /** True when the last load failed — the panel shows a retry state instead of "no resources". */
   readonly failed = signal(false);
 
   load(): void {
+    this.loadGraphs();
     this.api.getResources().subscribe({
       next: resources => {
         this.resources.set(resources);
@@ -25,6 +28,13 @@ export class ResourcesStore {
         this.loaded.set(true);
         this.failed.set(true);
       },
+    });
+  }
+
+  loadGraphs(): void {
+    this.api.getGraphs().subscribe({
+      next: graphs => this.graphs.set(graphs),
+      error: () => { /* health is decoration — the panel works without it */ },
     });
   }
 

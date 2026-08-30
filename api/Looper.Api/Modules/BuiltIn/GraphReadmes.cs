@@ -22,6 +22,25 @@ public static class GraphReadmes
         python3 loopergraph.py recall "<fuzzy question>" [--at …]  # vector entry -> graph expansion
         ```
 
+        ## Shared infrastructure (when this graph has a curator)
+
+        A graph can serve many loops at once. Then the roles split — that separation is what
+        keeps memory consistent:
+
+        - **Consumers** (every executing loop): query freely; contribute learnings with
+          `remember "<text>" --kind lesson|note|episode|proposal --agent <name> --run <id>` —
+          each contribution is its own inbox file, so parallel writers never collide. Consumers
+          NEVER write canonical facts.
+        - **The curator** (one dedicated loop): the only canonical writer. Works the inbox
+          (`inbox`, then per item extract facts and `inbox-merge <id>` or `inbox-reject <id>
+          --reason "…"`), resolves the competing facts `health` reports, and runs
+          `decay --days 30` so unused facts sink in ranking. Looper measures health in the
+          background and raises `graph.<slug>.needs-curation` when the inbox hits its
+          threshold — point the curator loop's event trigger at that topic.
+
+        Mutations take an advisory file lock; `usage.jsonl` records what `recall` actually
+        returns, which is what `health` and `decay` weigh facts by.
+
         ## Rules that keep this graph trustworthy
 
         1. **Typed edges only, from ontology.json.** A small controlled vocabulary is the whole

@@ -119,7 +119,9 @@ public sealed class ReviewGateCoordinatorTests : IDisposable
         var coordinator = new AgentRunCoordinator(
             new Factory(_options),
             new ClaudeCliExecutor(looperOptions, new Looper.Api.Modules.ResourceModuleRegistry(
-                NullLogger<Looper.Api.Modules.ResourceModuleRegistry>.Instance), NullLogger<ClaudeCliExecutor>.Instance),
+                NullLogger<Looper.Api.Modules.ResourceModuleRegistry>.Instance),
+                new GraphContextService(looperOptions, NullLogger<GraphContextService>.Instance),
+                NullLogger<ClaudeCliExecutor>.Instance),
             new SimulatedAgentExecutor(),
             new TestingActionRunner(looperOptions),
             new ReviewRunner(looperOptions, NullLogger<ReviewRunner>.Instance),
