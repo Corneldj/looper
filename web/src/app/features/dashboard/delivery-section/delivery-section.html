@@ -220,6 +220,9 @@
                   @if (pr.repository) {
                     <span class="repo mono">{{ pr.repository }}</span>
                   }
+                  @if (pr.satisfiesAcs) {
+                    <span class="acs mono" title="Acceptance criteria this PR satisfies, verified against the agent’s Specification">📐 {{ pr.satisfiesAcs }}</span>
+                  }
                   @if (pr.syncError) {
                     <span class="sync-warn">⚠ {{ pr.syncError }}</span>
                   }

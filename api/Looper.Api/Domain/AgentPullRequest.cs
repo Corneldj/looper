@@ -27,6 +27,10 @@ public class AgentPullRequest
     public string Repository { get; set; } = "";
     public int? Number { get; set; }
 
+    /// <summary>Acceptance criteria this PR satisfies ("AC-1, AC-3"), verified against the agent's
+    /// attached Specification at registration time. Null when the agent works without a spec.</summary>
+    public string? SatisfiesAcs { get; set; }
+
     public PrStatus Status { get; set; } = PrStatus.Open;
     public DateTime OpenedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? MergedAtUtc { get; set; }

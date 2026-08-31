@@ -180,6 +180,12 @@ a.pr-title:hover { color: var(--accent); }
   color: var(--text-3);
 }
 
+.acs {
+  display: block;
+  font-size: 11px;
+  color: var(--accent-strong);
+}
+
 .sync-warn {
   display: block;
   font-size: 11.5px;

@@ -42,6 +42,12 @@
         <input class="input mono" [(ngModel)]="repoPath" placeholder="/home/you/projects/my-app" />
         <span class="hint">A local clone lets Looper compute code survival for local or non-GitHub work.</span>
       </div>
+
+      <div class="field">
+        <label for="pr-satisfies">Satisfies (AC ids)</label>
+        <input id="pr-satisfies" class="input mono" [(ngModel)]="satisfies" placeholder="AC-1, AC-3" />
+        <span class="hint">Required when the agent works under a Specification — citations are verified against it.</span>
+      </div>
     </div>
 
     @if (saveError(); as message) {

@@ -35,6 +35,7 @@ function pr(overrides: Partial<PullRequestDto> = {}): PullRequestDto {
     url: 'https://github.com/acme/app/pull/12',
     repository: 'acme/app',
     number: 12,
+    satisfiesAcs: null,
     status: 'Merged',
     openedAtUtc: '2026-08-20T10:00:00Z',
     mergedAtUtc: '2026-08-21T09:00:00Z',

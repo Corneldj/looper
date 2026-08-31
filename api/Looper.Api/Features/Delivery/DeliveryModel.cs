@@ -11,6 +11,7 @@ public sealed record PullRequestDto(
     string? Url,
     string Repository,
     int? Number,
+    string? SatisfiesAcs,
     PrStatus Status,
     DateTime OpenedAtUtc,
     DateTime? MergedAtUtc,
@@ -32,7 +33,7 @@ public static class PullRequestMapper
 {
     public static PullRequestDto ToDto(this AgentPullRequest pr, string agentName) => new(
         pr.Id, pr.AgentId, agentName, pr.RunId, pr.Title, pr.Url, pr.Repository, pr.Number,
-        pr.Status, pr.OpenedAtUtc, pr.MergedAtUtc, pr.ClosedAtUtc,
+        pr.SatisfiesAcs, pr.Status, pr.OpenedAtUtc, pr.MergedAtUtc, pr.ClosedAtUtc,
         pr.Additions, pr.Deletions, pr.ReviewRounds, pr.ReviewComments, pr.HumanCommits,
         pr.FirstPass, pr.RepoPath, pr.MergeCommitSha,
         pr.SurvivalRate, pr.SurvivalCheckedAtUtc, pr.LastSyncedAtUtc, pr.SyncError);

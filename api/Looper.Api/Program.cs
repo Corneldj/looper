@@ -118,6 +118,7 @@ await using (var scope = app.Services.CreateAsyncScope())
     registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.KnowledgeGraphModule());
     registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.MemoryGraphModule());
     registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.ExecutionGraphModule());
+    registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.SpecificationModule());
 
     var moduleRecords = await db.ResourceModules.AsNoTracking().ToListAsync();
     await registry.ReconcileAsync(moduleRecords, scope.ServiceProvider.GetRequiredService<Looper.Api.Modules.ResourceModuleCompiler>());

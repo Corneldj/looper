@@ -25,6 +25,7 @@ export class LogPrModal {
   readonly url = signal('');
   readonly title = signal('');
   readonly repoPath = signal('');
+  readonly satisfies = signal('');
 
   readonly saving = signal(false);
   readonly saveError = signal<string | null>(null);
@@ -45,12 +46,15 @@ export class LogPrModal {
         url: this.url().trim() || null,
         title: this.title().trim() || null,
         repoPath: this.repoPath().trim() || null,
+        satisfies: this.satisfies().trim() || null,
       })
       .subscribe({
         next: dto => this.closed.emit(dto),
-        error: () => {
+        error: err => {
           this.saving.set(false);
-          this.saveError.set('Couldn’t log the PR — check that the API is running and try again.');
+          // The traceability gate returns instructive 400s (e.g. the spec's valid AC ids) — surface them.
+          const detail = typeof err?.error === 'string' ? err.error : err?.error?.detail || err?.error?.title;
+          this.saveError.set(detail || 'Couldn’t log the PR — check that the API is running and try again.');
         },
       });
   }

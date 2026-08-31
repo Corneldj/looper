@@ -208,6 +208,8 @@ public sealed class BuildWorkflowHandler(
            - SubAgent: {"description":"…","prompt":"…","tools":"Read,Grep?","model":"…?"}
            - Reviewer: {"rubric":"what acceptable means","model":"…?","maxFixRounds":2,"escalateOnFail":true}
            - WorkspacePool: {"rootPath":"/abs/path","provisioning":"blank|git-clone|copy-template","source":"…?","retentionDays":14,"maxWorkspaces":null}
+           - Specification (type "Custom", customTypeKey "Specification"): {"specId":"SPEC-1","content":"REQ-1 …\nAC-1 …\nAC-2 …","path":"…?","advisory":false}
+             — write real REQ-n/AC-n identifiers; Looper then REQUIRES every PR the attached agent registers to cite the AC ids it satisfies, verified against the spec. Attach one to any agent whose deliverable is code against requirements.
            - AzureConnection / PatToken: credential configs — create ONLY with placeholder values and say so in your report; never invent real secrets.
            - Dynamic types: type "Custom" + customTypeKey "<TypeKey>"; configJson keys = the type's field keys.
         3. Create an agent (a loop started on a schedule OR by events — one or the other):

@@ -348,6 +348,8 @@ export interface PullRequestDto {
   url: string | null;
   repository: string;
   number: number | null;
+  /** Acceptance criteria this PR satisfies ("AC-1, AC-3"), verified against the agent's Specification. */
+  satisfiesAcs: string | null;
   status: PrStatus;
   openedAtUtc: string;
   mergedAtUtc: string | null;
@@ -374,6 +376,8 @@ export interface RegisterPrBody {
   title?: string | null;
   repoPath?: string | null;
   repository?: string | null;
+  /** AC citations, e.g. "AC-1,AC-3" — required when the agent has an enforced Specification attached. */
+  satisfies?: string | null;
 }
 
 export interface UpdatePrBody {
