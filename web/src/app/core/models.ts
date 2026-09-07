@@ -69,6 +69,51 @@ export interface GeneratedResourceTypeDto {
   costUsd: number;
 }
 
+// ---------- Scripts (runnable Python/Bash resources) ----------
+
+export type ScriptLanguage = 'python' | 'bash';
+
+/** agent = the agent runs it on demand · before = harness runs it pre-iteration (stdout → prompt) · after = post-iteration gate. */
+export type ScriptTrigger = 'agent' | 'before' | 'after';
+
+export const SCRIPT_TRIGGERS: { id: ScriptTrigger; label: string; blurb: string }[] = [
+  { id: 'agent', label: 'When the agent decides', blurb: 'The agent gets the path and runs it on demand.' },
+  { id: 'before', label: 'Before every iteration', blurb: 'Looper runs it first and hands the output to the agent as context.' },
+  { id: 'after', label: 'After every iteration (gate)', blurb: 'Looper runs it after the loop; a non-zero exit fails the run.' },
+];
+
+export interface ScriptRunRequest {
+  resourceId?: string | null;
+  language?: ScriptLanguage | null;
+  code?: string | null;
+  args?: string | null;
+  workingDirectory?: string | null;
+  timeoutSeconds?: number | null;
+}
+
+export interface ScriptRunResultDto {
+  command: string;
+  exitCode: number;
+  passed: boolean;
+  durationMs: number;
+  output: string;
+}
+
+export interface ScriptAssistRequest {
+  name: string;
+  description: string | null;
+  language: ScriptLanguage;
+  code: string;
+  instruction: string;
+  allowRun: boolean;
+}
+
+export interface ScriptAssistResultDto {
+  code: string;
+  summary: string;
+  costUsd: number;
+}
+
 // ---------- Claude CLI status ----------
 
 export interface ClaudeStatusDto {

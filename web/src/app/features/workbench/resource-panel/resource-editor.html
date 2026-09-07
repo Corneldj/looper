@@ -344,6 +344,14 @@
         }
 
         @case ('Custom') {
+          @if (isScriptType()) {
+            <app-script-editor
+              [values]="customValues()"
+              [name]="name()"
+              [description]="description()"
+              (valuesChange)="customValues.set($event)"
+            />
+          } @else {
           @for (field of customFields(); track field.key) {
             <div class="field">
               @if (field.key === 'curator' && isMemoryGraphType()) {
@@ -453,6 +461,7 @@
               }
               }
             </div>
+          }
           }
         }
       }

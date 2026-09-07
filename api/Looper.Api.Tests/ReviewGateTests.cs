@@ -124,6 +124,7 @@ public sealed class ReviewGateCoordinatorTests : IDisposable
                 NullLogger<ClaudeCliExecutor>.Instance),
             new SimulatedAgentExecutor(),
             new TestingActionRunner(looperOptions),
+            new ScriptRunner(looperOptions),
             new ReviewRunner(looperOptions, NullLogger<ReviewRunner>.Instance),
             new EventDispatcher(NullLogger<EventDispatcher>.Instance),
             looperOptions,

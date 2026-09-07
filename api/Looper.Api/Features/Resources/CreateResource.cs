@@ -40,36 +40,35 @@ public sealed class CreateResourceHandler(LooperDbContext db, ResourceModuleRegi
 {
     public async Task<ResourceDto> Handle(CreateResourceCommand command, CancellationToken cancellationToken)
     {
-        string? customTypeKey = null;
+        var resource = new Resource
+        {
+            Name = command.Name.Trim(),
+            Type = command.Type,
+            Description = command.Description.Trim(),
+            ConfigJson = command.ConfigJson
+        };
+
         if (command.Type == ResourceType.Custom)
         {
             if (!registry.TryGet(command.CustomTypeKey!, out var module))
             {
                 throw new ValidationException($"Unknown resource type '{command.CustomTypeKey}'.");
             }
-            customTypeKey = module.TypeKey;
+            resource.CustomTypeKey = module.TypeKey;
 
-            // Scaffold the workspace now (graph folders seed their toolkit/protocol) so the
-            // user can inspect it immediately and dry-run agents find it in place. An
-            // unwritable path is a config error worth failing the save for.
+            // Scaffold the workspace now (graph folders seed their toolkit/protocol, scripts land
+            // on disk) so the user can inspect it immediately and dry-run agents find it in place.
+            // An unwritable path is a config error worth failing the save for.
             try
             {
-                module.PrepareRun(new Looper.Api.Modules.ResourceModuleContext(command.ConfigJson));
+                module.PrepareRun(new Looper.Api.Modules.ResourceModuleContext(
+                    command.ConfigJson, null, null, resource.Id, resource.Name, resource.Description));
             }
             catch (Exception ex)
             {
                 throw new ValidationException($"The resource's workspace could not be prepared: {ex.Message}");
             }
         }
-
-        var resource = new Resource
-        {
-            Name = command.Name.Trim(),
-            Type = command.Type,
-            CustomTypeKey = customTypeKey,
-            Description = command.Description.Trim(),
-            ConfigJson = command.ConfigJson
-        };
 
         db.Resources.Add(resource);
         await db.SaveChangesAsync(cancellationToken);

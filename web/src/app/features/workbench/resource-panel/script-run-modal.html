@@ -1,0 +1,33 @@
+<div class="modal-backdrop">
+  <div class="modal script-run-modal">
+    <div class="modal-header">
+      <div>
+        <h2>📜 {{ script().name }}</h2>
+        <p class="modal-sub">Manual run — no agent context, no credentials; exactly what the code does on its own.</p>
+      </div>
+      <button class="icon-btn" title="Close" [disabled]="busy()" (click)="close()">✕</button>
+    </div>
+
+    @if (busy()) {
+      <p class="run-note"><span class="pulse-dot"></span> Running…</p>
+    } @else if (error(); as message) {
+      <p class="run-error">{{ message }}</p>
+    } @else if (result(); as result) {
+      <div class="run-output" [class.failed]="!result.passed">
+        <div class="run-head">
+          <span [class]="'chip ' + (result.passed ? 'chip-green' : 'chip-red')">
+            {{ result.passed ? 'exit 0' : 'exit ' + result.exitCode }}
+          </span>
+          <span class="dim">{{ result.durationMs }} ms</span>
+          <span class="run-command mono" [title]="result.command">{{ result.command }}</span>
+        </div>
+        <pre class="run-pre mono">{{ result.output || '(no output)' }}</pre>
+      </div>
+    }
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" [disabled]="busy()" (click)="run()">Run again</button>
+      <button class="btn btn-primary" [disabled]="busy()" (click)="close()">Close</button>
+    </div>
+  </div>
+</div>

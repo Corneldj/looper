@@ -1,0 +1,150 @@
+<div class="form-row">
+  <div class="field">
+    <label>Language</label>
+    <select class="select" [ngModel]="language()" (ngModelChange)="set('language', $event)">
+      <option value="python">Python 3</option>
+      <option value="bash">Bash</option>
+    </select>
+  </div>
+  <div class="field trigger-field">
+    <label>When it runs</label>
+    <select class="select" [ngModel]="trigger()" (ngModelChange)="set('trigger', $event)">
+      @for (t of triggers; track t.id) {
+        <option [value]="t.id">{{ t.label }}</option>
+      }
+    </select>
+    <span class="hint">{{ triggerBlurb() }}</span>
+  </div>
+</div>
+
+<div class="field">
+  <div class="code-toolbar">
+    <label>Script <span class="file-name mono">{{ fileName() }}</span></label>
+    <div class="code-actions">
+      @if (lineCount() > 0) {
+        <span class="dim">{{ lineCount() }} line{{ lineCount() === 1 ? '' : 's' }}</span>
+      }
+      <button type="button" class="btn btn-ghost btn-sm" [class.active]="assistOpen()" (click)="toggleAssist()">
+        ✨ Ask Claude
+      </button>
+      <button type="button" class="btn btn-soft btn-sm" [disabled]="runBusy() || !code().trim()" (click)="runNow()">
+        @if (runBusy()) {
+          <span class="pulse-dot"></span> Running…
+        } @else {
+          ▶ Run
+        }
+      </button>
+    </div>
+  </div>
+
+  @if (assistOpen()) {
+    <div class="assist-panel">
+      <textarea
+        class="textarea assist-input"
+        rows="3"
+        [disabled]="assistBusy()"
+        [ngModel]="assistInstruction()"
+        (ngModelChange)="assistInstruction.set($event)"
+        [placeholder]="code() ? 'What should change? e.g. Add a --since flag and retry the request three times.' : 'What should this script do? e.g. Fetch open issues labelled bug from GitHub and print them as a table.'"
+      ></textarea>
+      <div class="assist-row">
+        <label class="allow-run">
+          <span class="switch">
+            <input type="checkbox" [disabled]="assistBusy()" [ngModel]="assistAllowRun()" (ngModelChange)="assistAllowRun.set($event)" />
+            <span class="track"></span>
+          </span>
+          <span>Let Claude run it to verify</span>
+        </label>
+        <button
+          type="button"
+          class="btn btn-primary btn-sm"
+          [disabled]="assistBusy() || assistInstruction().trim().length < 5"
+          (click)="askClaude()"
+        >
+          @if (assistBusy()) {
+            <span class="pulse-dot"></span> Claude is writing…
+          } @else {
+            {{ code() ? 'Update the script' : 'Write the script' }}
+          }
+        </button>
+      </div>
+      @if (assistBusy()) {
+        <span class="hint">Claude edits a scratch copy{{ assistAllowRun() ? ' and may run it' : '' }} — usually a minute or two. Nothing is saved until you click save.</span>
+      }
+      @if (assistError(); as message) {
+        <p class="assist-error">{{ message }}</p>
+      }
+      @if (assistResult(); as result) {
+        <div class="assist-summary">
+          <span class="chip chip-accent">✨ updated</span>
+          <span class="assist-text">{{ result.summary || 'Claude updated the script.' }}</span>
+          @if (result.costUsd > 0) {
+            <span class="dim">${{ result.costUsd.toFixed(4) }}</span>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  <textarea
+    class="textarea mono code-box"
+    spellcheck="false"
+    autocapitalize="off"
+    autocomplete="off"
+    wrap="off"
+    [placeholder]="language() === 'bash' ? '#!/usr/bin/env bash\nset -euo pipefail\necho ok' : '#!/usr/bin/env python3\nimport json, os, sys\n\nprint(json.dumps({&quot;ok&quot;: True}))'"
+    [ngModel]="code()"
+    (ngModelChange)="set('code', $event)"
+    (keydown)="onCodeKeydown($event)"
+  ></textarea>
+  <span class="hint">
+    Runs with <span class="mono">LOOPER_API_URL</span>, <span class="mono">LOOPER_RUN_ID</span> and <span class="mono">LOOPER_AGENT_ID</span>
+    set, plus any credential resources attached to the same agent. The agent finds it at
+    <span class="mono">${{ envVarName() }}</span>.
+  </span>
+
+  @if (runError(); as message) {
+    <p class="assist-error">{{ message }}</p>
+  }
+  @if (runResult(); as result) {
+    <div class="run-output" [class.failed]="!result.passed">
+      <div class="run-head">
+        <span [class]="'chip ' + (result.passed ? 'chip-green' : 'chip-red')">
+          {{ result.passed ? 'exit 0' : 'exit ' + result.exitCode }}
+        </span>
+        <span class="dim">{{ result.durationMs }} ms</span>
+        <span class="run-command mono" [title]="result.command">{{ result.command }}</span>
+      </div>
+      <pre class="run-pre mono">{{ result.output || '(no output)' }}</pre>
+    </div>
+  }
+</div>
+
+<div class="form-row">
+  <div class="field">
+    <label>Default arguments <span class="optional">optional</span></label>
+    <input class="input mono" [ngModel]="args()" (ngModelChange)="set('args', $event)" placeholder="--verbose" />
+    <span class="hint">Appended when Looper runs it (shell syntax).</span>
+  </div>
+  <div class="field timeout-field">
+    <label>Timeout (s) <span class="optional">optional</span></label>
+    <input class="input num" type="number" min="1" [ngModel]="timeoutSeconds()" (ngModelChange)="setTimeout($event)" placeholder="120" />
+  </div>
+</div>
+
+<div class="field">
+  <label>Working directory <span class="optional">optional</span></label>
+  <div class="path-with-browse">
+    <input
+      class="input mono"
+      [ngModel]="workingDirectory()"
+      (ngModelChange)="set('workingDirectory', $event)"
+      placeholder="Empty = the agent's working directory"
+    />
+    <button type="button" class="btn btn-ghost" (click)="openPicker()">Browse…</button>
+  </div>
+</div>
+
+@if (pickerOpen()) {
+  <app-folder-picker [startPath]="workingDirectory() || null" (picked)="onFolderPicked($event)" />
+}

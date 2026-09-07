@@ -11,7 +11,9 @@ public sealed record AgentExecutionContext(
     /// <summary>The user's answers to resolved action requests, delivered once on the next run.</summary>
     string? UserResponses = null,
     /// <summary>For event-triggered runs: the triggering events (topic + payload), verbatim.</summary>
-    string? TriggerEvents = null);
+    string? TriggerEvents = null,
+    /// <summary>Output of before-run Script resources, already formatted as a prompt section.</summary>
+    string? ScriptOutputs = null);
 
 public sealed record AgentExecutionOutcome(
     bool Success,

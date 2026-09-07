@@ -18,6 +18,13 @@ public sealed class DeleteResourceHandler(LooperDbContext db)
 
         db.Resources.Remove(resource);
         await db.SaveChangesAsync(cancellationToken);
+
+        // A script's on-disk projection goes with it; other types own their folders (user paths).
+        if (resource.Type == Looper.Api.Domain.ResourceType.Custom &&
+            string.Equals(resource.CustomTypeKey, Looper.Api.Modules.BuiltIn.ScriptModule.TypeKey_, StringComparison.OrdinalIgnoreCase))
+        {
+            Looper.Api.Modules.BuiltIn.ScriptResources.RemoveMaterialized(resource.Id);
+        }
         return true;
     }
 }

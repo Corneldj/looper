@@ -5,10 +5,11 @@ import { ResourcesStore } from '../../../core/stores';
 import { GeneratedResourceTypeDto, ResourceDto, ResourceType, ResourceTypeDto } from '../../../core/models';
 import { ResourceEditor } from './resource-editor';
 import { WorkspacesModal } from './workspaces-modal';
+import { ScriptRunModal } from './script-run-modal';
 
 @Component({
   selector: 'app-resource-panel',
-  imports: [ResourceEditor, FormsModule, WorkspacesModal],
+  imports: [ResourceEditor, FormsModule, WorkspacesModal, ScriptRunModal],
   templateUrl: './resource-panel.html',
   styleUrl: './resource-panel.scss',
 })
@@ -27,6 +28,12 @@ export class ResourcePanel implements OnInit {
   readonly error = signal<string | null>(null);
   /** The WorkspacePool resource whose workspaces modal is open. */
   readonly workspacesFor = signal<ResourceDto | null>(null);
+  /** The Script resource being run from its card. */
+  readonly runScriptFor = signal<ResourceDto | null>(null);
+
+  isScript(resource: ResourceDto): boolean {
+    return resource.type === 'Custom' && resource.customTypeKey === 'Script';
+  }
 
   // ---------- "New type with AI" flow ----------
   readonly aiOpen = signal(false);

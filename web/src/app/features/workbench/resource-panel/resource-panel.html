@@ -69,6 +69,9 @@
             @if (resource.type === 'WorkspacePool') {
               <button class="icon-btn" title="Workspaces" (click)="workspacesFor.set(resource)">🗂️</button>
             }
+            @if (isScript(resource)) {
+              <button class="icon-btn" title="Run script now" (click)="runScriptFor.set(resource)">▶️</button>
+            }
             <button class="icon-btn" title="Edit" (click)="edit(resource)">✏️</button>
             <button class="icon-btn" title="Delete" (click)="remove(resource)">🗑️</button>
           </div>
@@ -192,4 +195,8 @@
 
 @if (workspacesFor(); as pool) {
   <app-workspaces-modal [pool]="pool" (closed)="workspacesFor.set(null)" />
+}
+
+@if (runScriptFor(); as script) {
+  <app-script-run-modal [script]="script" (closed)="runScriptFor.set(null)" />
 }

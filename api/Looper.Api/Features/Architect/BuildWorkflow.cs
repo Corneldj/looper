@@ -210,6 +210,11 @@ public sealed class BuildWorkflowHandler(
            - WorkspacePool: {"rootPath":"/abs/path","provisioning":"blank|git-clone|copy-template","source":"…?","retentionDays":14,"maxWorkspaces":null}
            - Specification (type "Custom", customTypeKey "Specification"): {"specId":"SPEC-1","content":"REQ-1 …\nAC-1 …\nAC-2 …","path":"…?","advisory":false}
              — write real REQ-n/AC-n identifiers; Looper then REQUIRES every PR the attached agent registers to cite the AC ids it satisfies, verified against the spec. Attach one to any agent whose deliverable is code against requirements.
+           - Script (type "Custom", customTypeKey "Script"): {"language":"python|bash","code":"<the full script>","trigger":"agent|before|after","args":"","timeoutSeconds":120,"workingDirectory":"…?"}
+             — a runnable script for the deterministic parts of a loop. trigger "before" = Looper runs it before every iteration and hands
+             its stdout to the agent as context (fetch inputs, snapshot state); "after" = Looper runs it after every iteration as a gate
+             (non-zero exit fails the run — verification without tokens); "agent" = the agent runs it on demand (path in $LOOPER_SCRIPT_<NAME>).
+             Write real, working code (stdlib only); scripts see LOOPER_API_URL/LOOPER_RUN_ID/LOOPER_AGENT_ID and the agent's credential env vars.
            - AzureConnection / PatToken: credential configs — create ONLY with placeholder values and say so in your report; never invent real secrets.
            - Dynamic types: type "Custom" + customTypeKey "<TypeKey>"; configJson keys = the type's field keys.
         3. Create an agent (a loop started on a schedule OR by events — one or the other):

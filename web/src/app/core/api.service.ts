@@ -26,6 +26,10 @@ import {
   RunDetailDto,
   RunSummaryDto,
   SaveAgentRequest,
+  ScriptAssistRequest,
+  ScriptAssistResultDto,
+  ScriptRunRequest,
+  ScriptRunResultDto,
   UserActionDto,
   WorkspaceClaimDto,
   WorkspaceDto,
@@ -157,6 +161,18 @@ export class ApiService {
   /** Removes the workspace directory immediately; the record remains as history. */
   cleanWorkspace(id: string): Observable<void> {
     return this.http.delete<void>(`${API_BASE}/workspaces/${id}`);
+  }
+
+  // ---------- Scripts ----------
+
+  /** Runs a saved script (by resourceId) or unsaved code from the editor; blocks until it exits or times out. */
+  runScript(body: ScriptRunRequest): Observable<ScriptRunResultDto> {
+    return this.http.post<ScriptRunResultDto>(`${API_BASE}/scripts/run`, body);
+  }
+
+  /** Long-running: Claude edits the script in a scratch workspace and the result comes back as a proposal. */
+  assistScript(body: ScriptAssistRequest): Observable<ScriptAssistResultDto> {
+    return this.http.post<ScriptAssistResultDto>(`${API_BASE}/scripts/assist`, body);
   }
 
   // ---------- Claude CLI status ----------

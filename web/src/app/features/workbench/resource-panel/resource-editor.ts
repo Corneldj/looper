@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../../core/api.service';
 import { AgentsStore } from '../../../core/stores';
 import { FolderPicker } from '../../../shared/folder-picker/folder-picker';
+import { ScriptEditor } from './script-editor';
 import {
   MODELS,
   ResourceDto,
@@ -21,7 +22,7 @@ type McpTransport = 'stdio' | 'http' | 'sse';
  */
 @Component({
   selector: 'app-resource-editor',
-  imports: [FormsModule, FolderPicker],
+  imports: [FormsModule, FolderPicker, ScriptEditor],
   templateUrl: './resource-editor.html',
   styleUrl: './resource-editor.scss',
 })
@@ -34,6 +35,9 @@ export class ResourceEditor implements OnInit {
 
   readonly isMemoryGraphType = computed(() =>
     ResourceEditor.memoryGraphTypeKeys.includes(this.typeDef()?.typeKey ?? ''));
+
+  /** Scripts get a code editor with run + Claude-assist panels instead of the generic field list. */
+  readonly isScriptType = computed(() => this.typeDef()?.typeKey === 'Script');
 
   readonly agentNames = computed(() => this.agentsStore.agents().map(a => a.name).sort());
 

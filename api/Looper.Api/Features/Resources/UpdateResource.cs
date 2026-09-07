@@ -56,7 +56,8 @@ public sealed class UpdateResourceHandler(LooperDbContext db, Looper.Api.Modules
         {
             try
             {
-                module.PrepareRun(new Looper.Api.Modules.ResourceModuleContext(entity.ConfigJson));
+                module.PrepareRun(new Looper.Api.Modules.ResourceModuleContext(
+                    entity.ConfigJson, null, null, entity.Id, entity.Name, entity.Description));
             }
             catch (Exception ex)
             {

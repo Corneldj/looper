@@ -77,9 +77,23 @@ public sealed class ResourceModuleContext
     /// <summary>Run-scoped context: the agent this contribution is for. Additive overload —
     /// modules compiled against the older surface keep loading and see null/empty identity.</summary>
     public ResourceModuleContext(string configJson, Guid? agentId, string? agentName)
+        : this(configJson, agentId, agentName, null, null, null)
+    {
+    }
+
+    /// <summary>
+    /// Full context: the agent AND the resource itself. Lets a module key on-disk state by the
+    /// resource's stable id (e.g. a materialized script file) and describe the resource to the
+    /// agent by name. Additive overload — older module DLLs keep binding to the shorter ctors.
+    /// </summary>
+    public ResourceModuleContext(string configJson, Guid? agentId, string? agentName,
+        Guid? resourceId, string? resourceName, string? resourceDescription)
     {
         AgentId = agentId;
         AgentName = agentName ?? "";
+        ResourceId = resourceId;
+        ResourceName = resourceName ?? "";
+        ResourceDescription = resourceDescription ?? "";
         ConfigJson = configJson;
         try
         {
@@ -100,6 +114,15 @@ public sealed class ResourceModuleContext
 
     /// <summary>The agent's name; empty outside a run. Lets shared resources vary by consumer.</summary>
     public string AgentName { get; }
+
+    /// <summary>The resource this config belongs to; null when the context was built from bare JSON.</summary>
+    public Guid? ResourceId { get; }
+
+    /// <summary>The resource's user-facing name; empty when unknown.</summary>
+    public string ResourceName { get; }
+
+    /// <summary>The resource's description; empty when unknown.</summary>
+    public string ResourceDescription { get; }
 
     public T? GetConfig<T>() where T : class
     {

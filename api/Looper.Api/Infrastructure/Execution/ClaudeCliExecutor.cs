@@ -63,7 +63,7 @@ public sealed class ClaudeCliExecutor(
             UseShellExecute = false
         };
 
-        BuildArguments(startInfo.ArgumentList, agent, resources, additionalDirectories, contributions, context.FixInstructions, context.UserResponses, context.TriggerEvents, memoryContext);
+        BuildArguments(startInfo.ArgumentList, agent, resources, additionalDirectories, contributions, context.FixInstructions, context.UserResponses, context.TriggerEvents, memoryContext, context.ScriptOutputs);
 
         foreach (var (key, value) in AgentWorkspace.ResolveEnvironment(resources))
         {
@@ -145,7 +145,8 @@ public sealed class ClaudeCliExecutor(
 
             try
             {
-                var moduleContext = new ResourceModuleContext(resource.ConfigJson, agent.Id, agent.Name);
+                var moduleContext = new ResourceModuleContext(resource.ConfigJson, agent.Id, agent.Name,
+                    resource.Id, resource.Name, resource.Description);
                 module.PrepareRun(moduleContext);
                 contributions.Add(module.Contribute(moduleContext));
             }
@@ -163,10 +164,10 @@ public sealed class ClaudeCliExecutor(
     private void BuildArguments(ICollection<string> args, LoopAgent agent, IReadOnlyList<Resource> resources,
         IReadOnlyList<string> additionalDirectories, IReadOnlyList<ResourceContribution> contributions,
         string? fixInstructions, string? userResponses = null, string? triggerEvents = null,
-        IReadOnlyList<string>? memoryContext = null)
+        IReadOnlyList<string>? memoryContext = null, string? scriptOutputs = null)
     {
         args.Add("-p");
-        args.Add(BuildPrompt(agent, resources, contributions, fixInstructions, userResponses, triggerEvents, memoryContext));
+        args.Add(BuildPrompt(agent, resources, contributions, fixInstructions, userResponses, triggerEvents, memoryContext, scriptOutputs));
         args.Add("--output-format");
         args.Add("json");
         args.Add("--model");
@@ -225,7 +226,7 @@ public sealed class ClaudeCliExecutor(
     internal static string BuildPrompt(LoopAgent agent, IReadOnlyList<Resource> resources,
         IReadOnlyList<ResourceContribution> contributions, string? fixInstructions = null,
         string? userResponses = null, string? triggerEvents = null,
-        IReadOnlyList<string>? memoryContext = null)
+        IReadOnlyList<string>? memoryContext = null, string? scriptOutputs = null)
     {
         var ragSections = resources
             .Where(r => r.Type == ResourceType.Rag)
@@ -242,6 +243,12 @@ public sealed class ClaudeCliExecutor(
         foreach (var actionResource in resources.Where(r => r.Type == ResourceType.UserAction))
         {
             extraSections.Add(BuildUserActionProtocol(ResourceConfig.Parse<UserActionConfig>(actionResource)));
+        }
+        // Before-run script output sits right after the memory preamble: both are harness-provided
+        // inputs the agent should read before the resource protocols that follow.
+        if (!string.IsNullOrWhiteSpace(scriptOutputs))
+        {
+            extraSections.Insert(0, scriptOutputs);
         }
         if (memoryContext is { Count: > 0 })
         {

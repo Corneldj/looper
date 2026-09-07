@@ -14,6 +14,7 @@ public sealed class AgentRunCoordinator(
     ClaudeCliExecutor cliExecutor,
     SimulatedAgentExecutor simulatedExecutor,
     TestingActionRunner testingActionRunner,
+    ScriptRunner scriptRunner,
     ReviewRunner reviewRunner,
     EventDispatcher eventDispatcher,
     IOptions<LooperOptions> options,
@@ -135,8 +136,42 @@ public sealed class AgentRunCoordinator(
                 timeoutCts.Token, active.UserCancellation.Token);
 
             var executor = agent.DryRun ? (IAgentExecutor)simulatedExecutor : cliExecutor;
+
+            // Before-run scripts: deterministic input gathering ahead of the model. Their output
+            // becomes prompt context; a failure fails the run before any tokens are spent.
+            IReadOnlyList<TestingActionResult> beforeResults = [];
+            if (!agent.DryRun)
+            {
+                try
+                {
+                    beforeResults = await scriptRunner.RunStageAsync(
+                        Modules.BuiltIn.ScriptModule.TriggerBefore, agent, resources, runId, log, linkedCts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    await FinalizeCancelledAsync(runId, agent.Id, timeoutCts.IsCancellationRequested, log);
+                    return;
+                }
+                if (beforeResults.Any(r => !r.Passed))
+                {
+                    var failedNames = string.Join(", ", beforeResults.Where(r => !r.Passed).Select(r => $"'{r.Name}'"));
+                    await log("error", $"Before-run script(s) {failedNames} failed; the iteration was not started.");
+                    var aborted = new AgentExecutionOutcome(false, null,
+                        $"Before-run script(s) {failedNames} failed; the iteration was not started.", 0, 0, 0, 0, 0, 0, 0);
+                    await FinalizeAsync(runId, agent.Id, aborted, (TestingActionRunner.Serialize(beforeResults), false),
+                        new ReviewInfo(null, 0, null, null));
+                    await RaiseCompletionEventAsync(agent, runId, false, eventDepth);
+                    return;
+                }
+            }
+            else if (Modules.BuiltIn.ScriptResources.Scripts(resources).Count > 0)
+            {
+                await log("info", "[dry run] Scripts skipped.");
+            }
+
             var context = new AgentExecutionContext(agent, resources, runId,
-                UserResponses: userResponses, TriggerEvents: eventContext);
+                UserResponses: userResponses, TriggerEvents: eventContext,
+                ScriptOutputs: ScriptRunner.BuildPromptSection(beforeResults));
 
             AgentExecutionOutcome outcome;
             try
@@ -160,7 +195,7 @@ public sealed class AgentRunCoordinator(
             {
                 try
                 {
-                    testResults = await testingActionRunner.RunAllAsync(agent, resources, log, linkedCts.Token);
+                    testResults = await RunPostRunGatesAsync(agent, resources, runId, beforeResults, log, linkedCts.Token);
                 }
                 catch (OperationCanceledException)
                 {
@@ -180,7 +215,7 @@ public sealed class AgentRunCoordinator(
             try
             {
                 (outcome, testResults, review) = await RunReviewGateAsync(
-                    agent, resources, runId, executor, outcome, testResults, log, linkedCts.Token);
+                    agent, resources, runId, executor, outcome, testResults, beforeResults, log, linkedCts.Token);
             }
             catch (OperationCanceledException)
             {
@@ -206,6 +241,23 @@ public sealed class AgentRunCoordinator(
     }
 
     /// <summary>
+    /// The post-run gate: testing actions, then after-run scripts, all in one verdict. Before-run
+    /// results are carried along so the run record shows every script that executed. Null when
+    /// nothing at all ran.
+    /// </summary>
+    private async Task<(string ResultsJson, bool AllPassed)?> RunPostRunGatesAsync(
+        LoopAgent agent, IReadOnlyList<Resource> resources, Guid runId,
+        IReadOnlyList<TestingActionResult> beforeResults, RunLogWriter log, CancellationToken cancellationToken)
+    {
+        var results = new List<TestingActionResult>(beforeResults);
+        results.AddRange(await testingActionRunner.RunAsync(agent, resources, log, cancellationToken));
+        results.AddRange(await scriptRunner.RunStageAsync(
+            Modules.BuiltIn.ScriptModule.TriggerAfter, agent, resources, runId, log, cancellationToken));
+        if (results.Count == 0) return null;
+        return (TestingActionRunner.Serialize(results), results.All(r => r.Passed));
+    }
+
+    /// <summary>
     /// Runs every attached Reviewer against the completed work. On failure, the worker gets the
     /// combined fix instructions and runs again (testing actions re-gate the revision), up to the
     /// largest MaxFixRounds among reviewers. Cost, tokens and turns accumulate onto the outcome.
@@ -217,6 +269,7 @@ public sealed class AgentRunCoordinator(
         IAgentExecutor executor,
         AgentExecutionOutcome outcome,
         (string ResultsJson, bool AllPassed)? testResults,
+        IReadOnlyList<TestingActionResult> beforeResults,
         RunLogWriter log,
         CancellationToken cancellationToken)
     {
@@ -313,7 +366,7 @@ public sealed class AgentRunCoordinator(
             }
 
             // A revision can break what the testing gate had already accepted — re-gate it.
-            testResults = await testingActionRunner.RunAllAsync(agent, resources, log, cancellationToken);
+            testResults = await RunPostRunGatesAsync(agent, resources, runId, beforeResults, log, cancellationToken);
             if (testResults is { AllPassed: false })
             {
                 await log("error", "Testing actions failed on the revised work; review cannot pass.");
