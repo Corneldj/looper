@@ -1,0 +1,120 @@
+@if (!aiOpen()) {
+  <div class="modal-backdrop" (click)="closed.emit()">
+    <div class="modal picker-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>New resource</h2>
+        <button class="icon-btn" title="Close" (click)="closed.emit()">✕</button>
+      </div>
+      <p class="picker-intro">What should your agents get access to?</p>
+      @if (error(); as message) {
+        <p class="picker-error">{{ message }}</p>
+      }
+      <div class="type-grid">
+        @for (t of store.types(); track t.typeKey) {
+          <button type="button" class="card interactive type-card" (click)="pick(t)">
+            <span class="type-icon">{{ t.icon }}</span>
+            <span class="type-copy">
+              <span class="type-label">{{ t.label }}</span>
+              <span class="type-blurb">{{ t.blurb }}</span>
+            </span>
+            @if (!t.builtIn) {
+              <span
+                class="icon-btn type-remove"
+                role="button"
+                title="Remove this resource type"
+                (click)="removeType(t, $event)"
+                >✕</span
+              >
+            }
+          </button>
+        }
+        <button type="button" class="card interactive type-card ai-card" (click)="openAiCreate()">
+          <span class="type-icon">✨</span>
+          <span class="type-copy">
+            <span class="type-label">New type, written by Claude</span>
+            <span class="type-blurb">Describe a capability — Claude writes, compiles and installs the module live.</span>
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+} @else {
+  <div class="modal-backdrop">
+    <div class="modal ai-modal">
+      <div class="modal-header">
+        <h2>✨ New resource type</h2>
+        <button class="icon-btn" title="Close" [disabled]="aiBusy()" (click)="closeAiCreate()">✕</button>
+      </div>
+
+      @if (aiResult(); as result) {
+        <div class="ai-success">
+          <p class="ai-success-line">
+            <span class="type-icon">{{ result.type.icon }}</span>
+            <strong>{{ result.type.label }}</strong> is installed and ready to use.
+          </p>
+          @if (result.costUsd > 0) {
+            <p class="hint">Generation cost: ${{ result.costUsd.toFixed(4) }}</p>
+          }
+          <details class="ai-source">
+            <summary>View the generated module source</summary>
+            <pre class="mono">{{ result.sourceCode }}</pre>
+          </details>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" (click)="closeAiCreate()">Done</button>
+          <button class="btn btn-primary" (click)="useGeneratedType()">Create a {{ result.type.label }}</button>
+        </div>
+      } @else {
+        <p class="picker-intro">
+          Describe the capability your agents need. Claude writes a C# module, Looper compiles it and
+          loads it as a new resource type — no restart needed.
+        </p>
+        <div class="field">
+          <label for="ai-description">What should it do?</label>
+          <textarea
+            id="ai-description"
+            class="textarea"
+            rows="4"
+            [disabled]="aiBusy()"
+            [(ngModel)]="aiDescription"
+            placeholder="e.g. A Mailchimp audience: API key and list id, exposed as environment variables, with instructions for reading subscriber counts and scheduling a send."
+          ></textarea>
+          <span class="hint">Secrets you describe become password fields and are masked automatically.</span>
+        </div>
+        @if (aiError(); as message) {
+          <p class="picker-error ai-error">{{ message }}</p>
+        }
+        @if (aiBusy()) {
+          <div class="ai-progress" [class.repairing]="aiJob()?.phase === 'Repairing'">
+            <span class="pulse-dot"></span>
+            <span class="ai-progress-text">{{ aiProgress() }}</span>
+            @if (aiJob(); as job) {
+              @if (job.costUsd > 0) {
+                <span class="hint">${{ job.costUsd.toFixed(4) }} so far</span>
+              }
+            }
+          </div>
+          @if (aiJob(); as job) {
+            @if (job.lastErrors.length > 0) {
+              <details class="ai-errors">
+                <summary>Last compiler errors ({{ job.lastErrors.length }}) — being fed back to Claude</summary>
+                <pre class="mono">{{ job.lastErrors.join('\n') }}</pre>
+              </details>
+            }
+          }
+        }
+        <div class="modal-footer">
+          @if (aiBusy()) {
+            <button class="btn btn-danger cancel-generation" [disabled]="cancelling() || !aiJob()" (click)="cancelGeneration()">
+              {{ cancelling() ? 'Cancelling…' : 'Cancel generation' }}
+            </button>
+            <span class="hint ai-wait">Each attempt takes a minute or two. Compile errors go straight back to Claude, up to {{ aiJob()?.maxAttempts ?? 4 }} attempts.</span>
+          } @else {
+            <button class="btn btn-ghost" (click)="closeAiCreate()">Cancel</button>
+            <button class="btn btn-primary" [disabled]="aiDescription().trim().length < 10" (click)="generateType()">Generate type</button>
+          }
+        </div>
+      }
+    </div>
+  </div>
+}

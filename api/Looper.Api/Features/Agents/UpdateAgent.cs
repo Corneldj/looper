@@ -21,9 +21,6 @@ public sealed class UpdateAgentValidator : AbstractValidator<UpdateAgentCommand>
         RuleFor(c => c.Request.MaxTurns).InclusiveBetween(1, 250);
         RuleFor(c => c.Request.AutonomyLevel).InclusiveBetween(1, 4);
         RuleFor(c => c.Request.TriggerTopics)
-            .Must(t => Looper.Api.Infrastructure.Execution.EventDispatcher.ParsePatterns(t).Count > 0)
-            .When(c => c.Request.TriggerMode == Looper.Api.Domain.TriggerMode.Event)
-            .WithMessage("An event-triggered agent needs at least one topic pattern to listen for.")
             .Must(t => Looper.Api.Infrastructure.Execution.EventDispatcher.ParsePatterns(t)
                 .All(Looper.Api.Infrastructure.Execution.EventDispatcher.IsValidPattern))
             .When(c => c.Request.TriggerMode == Looper.Api.Domain.TriggerMode.Event)
@@ -48,6 +45,8 @@ public sealed class UpdateAgentHandler(LooperDbContext db, AgentRunCoordinator c
         var resources = await db.Resources
             .Where(r => request.ResourceIds.Contains(r.Id))
             .ToListAsync(cancellationToken);
+        AgentTriggers.RequireSameWorkflow(agent.WorkflowId, resources);
+        AgentTriggers.RequireSomethingToListenFor(request, resources);
         agent.Resources.Clear();
         agent.Resources.AddRange(resources);
 

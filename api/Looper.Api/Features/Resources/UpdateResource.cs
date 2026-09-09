@@ -62,7 +62,7 @@ public sealed class UpdateResourceHandler(LooperDbContext db, Looper.Api.Modules
             catch (Exception ex)
             {
                 throw new FluentValidation.ValidationException(
-                    $"The resource's workspace could not be prepared: {ex.Message}");
+                    $"The resource could not be prepared: {ex.Message}");
             }
         }
 

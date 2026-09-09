@@ -88,9 +88,33 @@
             <textarea
               class="textarea"
               rows="3"
-              placeholder="Your answer — it reaches the agent's next run…"
+              placeholder="Your decision or answer — leave empty if you simply did what was asked"
               (input)="onActionResponseInput(request.id, $event)"
             ></textarea>
+            @if (hasResponse(request.id)) {
+              <div class="record-as" role="radiogroup" aria-label="Record the answer as">
+                <span class="record-as-label">Record it as</span>
+                <label class="record-option" [class.selected]="recordAsFor(request.id) === 'rule'">
+                  <input type="radio" [name]="'record-' + request.id" [checked]="recordAsFor(request.id) === 'rule'" (change)="setRecordAs(request.id, 'rule')" />
+                  <span class="record-title">Standing rule</span>
+                  <span class="record-hint">Appended to “{{ a.name }} decisions” — in the system prompt of every run.</span>
+                </label>
+                @if (request.canRecordToMemory) {
+                  <label class="record-option" [class.selected]="recordAsFor(request.id) === 'memory'">
+                    <input type="radio" [name]="'record-' + request.id" [checked]="recordAsFor(request.id) === 'memory'" (change)="setRecordAs(request.id, 'memory')" />
+                    <span class="record-title">Memory graph inbox</span>
+                    <span class="record-hint">For the curator to fold into canonical memory.</span>
+                  </label>
+                }
+                <label class="record-option" [class.selected]="recordAsFor(request.id) === 'none'">
+                  <input type="radio" [name]="'record-' + request.id" [checked]="recordAsFor(request.id) === 'none'" (change)="setRecordAs(request.id, 'none')" />
+                  <span class="record-title">Nowhere</span>
+                  <span class="record-hint">Kept for the record only; the agent starts clean and verifies the state itself.</span>
+                </label>
+              </div>
+            } @else {
+              <span class="record-as-note">No answer: the request is marked completed and the agent starts its next iteration from a clean context.</span>
+            }
             <div class="user-action-actions">
               <button
                 type="button"
@@ -98,7 +122,7 @@
                 [disabled]="resolvingActionId() !== null"
                 (click)="resolveAction(request)"
               >
-                {{ resolvingActionId() === request.id ? 'Resolving…' : 'Resolve & continue' }}
+                {{ resolvingActionId() === request.id ? 'Completing…' : 'Mark completed & continue' }}
               </button>
             </div>
           </div>
@@ -292,7 +316,7 @@
 
           @if (run.testResults && run.testResults.length > 0) {
             <section class="drawer-section">
-              <span class="section-label">Testing actions &amp; scripts</span>
+              <span class="section-label">Checks &amp; scripts</span>
               <div class="test-list">
                 @for (test of run.testResults; track $index) {
                   <details class="test-result">

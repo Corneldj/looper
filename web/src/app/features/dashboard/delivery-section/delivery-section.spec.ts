@@ -83,7 +83,11 @@ describe('DeliverySection', () => {
     return fixture;
   }
 
-  /** Advances past timer(0) and answers the initial metrics + PR-list pair. */
+  /**
+   * Advances past timer(0) and answers the initial metrics + PR-list pair. With no PR data the
+   * section starts folded (it is one outcome family among the user's metrics) — unfold it so the
+   * tiles can be asserted.
+   */
   function flushInitial(
     fixture: ComponentFixture<DeliverySection>,
     m: DeliveryMetricsDto,
@@ -93,7 +97,37 @@ describe('DeliverySection', () => {
     http.expectOne(r => r.url === `${API_BASE}/delivery/metrics`).flush(m);
     http.expectOne(r => r.url === `${API_BASE}/delivery/prs`).flush(list);
     fixture.detectChanges();
+    const toggle = (fixture.nativeElement as HTMLElement).querySelector('.fold-toggle') as HTMLButtonElement;
+    if (toggle?.textContent?.trim() === 'Show') {
+      toggle.click();
+      fixture.detectChanges();
+    }
   }
+
+  it('starts folded while no pull request exists, and open once one does', fakeAsync(() => {
+    const idle = create();
+    tick();
+    http.expectOne(r => r.url === `${API_BASE}/delivery/metrics`).flush(metrics());
+    http.expectOne(r => r.url === `${API_BASE}/delivery/prs`).flush([]);
+    idle.detectChanges();
+    const idleEl: HTMLElement = idle.nativeElement;
+    expect(idleEl.querySelector('.delivery')?.classList).toContain('is-folded');
+    expect(idleEl.querySelectorAll('.kpi').length).toBe(0);
+    expect(idleEl.textContent).toContain('Idle');
+    discardPeriodicTasks();
+  }));
+
+  it('opens by itself when the period has pull requests', fakeAsync(() => {
+    const fixture = create();
+    tick();
+    http.expectOne(r => r.url === `${API_BASE}/delivery/metrics`).flush(metrics({ mergedPrs: 1 }));
+    http.expectOne(r => r.url === `${API_BASE}/delivery/prs`).flush([pr()]);
+    fixture.detectChanges();
+    const element: HTMLElement = fixture.nativeElement;
+    expect(element.querySelector('.delivery')?.classList).not.toContain('is-folded');
+    expect(element.querySelectorAll('.kpi').length).toBe(5);
+    discardPeriodicTasks();
+  }));
 
   it('requests delivery metrics and PRs for the given period', fakeAsync(() => {
     create(30);
@@ -102,6 +136,7 @@ describe('DeliverySection', () => {
     const metricsReq = http.expectOne(r => r.url === `${API_BASE}/delivery/metrics`);
     expect(metricsReq.request.method).toBe('GET');
     expect(metricsReq.request.params.get('days')).toBe('30');
+    expect(metricsReq.request.params.has('workflowId')).withContext('no filter = every workflow').toBeFalse();
     metricsReq.flush(metrics());
 
     const prsReq = http.expectOne(r => r.url === `${API_BASE}/delivery/prs`);

@@ -30,7 +30,7 @@ public class ScriptModuleTests
     public void Contribute_exposes_the_path_the_directory_and_run_instructions()
     {
         var contribution = new ScriptModule().Contribute(Context(
-            """{"language":"python","code":"print(1)","trigger":"agent","args":"--verbose"}""",
+            """{"language":"python","code":"print(1)","trigger":"before","args":"--verbose"}""",
             description: "Summarises yesterday's tickets."));
 
         var path = ScriptResources.ScriptPath(Id, "Nightly Report", ScriptResources.Parse("python", "print(1)", null, null, null, null));
@@ -41,6 +41,7 @@ public class ScriptModuleTests
         Assert.Contains("SCRIPT 'Nightly Report' (python)", section);
         Assert.Contains("Purpose: Summarises yesterday's tickets.", section);
         Assert.Contains("python3 \"$LOOPER_SCRIPT_NIGHTLY_REPORT\" --verbose", section);
+        Assert.Contains("SCRIPT OUTPUT section", section);
         Assert.Contains("do not edit it", section);
     }
 
@@ -117,7 +118,9 @@ public class ScriptModuleTests
         Assert.Equal("-v", config.Args);
         Assert.Equal(13, config.TimeoutSeconds);
         Assert.Null(config.WorkingDirectory);
-        Assert.Equal(ScriptModule.TriggerAgent, ScriptResources.Parse(null, "x", "whenever", null, 0, null).Trigger);
+        // The retired on-demand mode, and anything unknown, runs before — deterministic by construction.
+        Assert.Equal(ScriptModule.TriggerBefore, ScriptResources.Parse(null, "x", "agent", null, 0, null).Trigger);
+        Assert.Equal(ScriptModule.TriggerBefore, ScriptResources.Parse(null, "x", "whenever", null, 0, null).Trigger);
     }
 
     [Fact]
@@ -125,7 +128,8 @@ public class ScriptModuleTests
     {
         var prompt = BuildWorkflowHandler.BuildArchitectPrompt("x", "{}", "http://localhost:5210");
         Assert.Contains("customTypeKey \"Script\"", prompt);
-        Assert.Contains("\"trigger\":\"agent|before|after\"", prompt);
+        Assert.Contains("\"trigger\":\"before|after\"", prompt);
+        Assert.Contains("customTypeKey \"EventRaiser\"", prompt);
     }
 
     [Fact]
@@ -233,7 +237,7 @@ public class ScriptRunnerTests
             Assert.Equal(2, gate.ExitCode);
             Assert.Contains(logs, l => l.StartsWith("error:") && l.Contains("'Verify' failed (exit 2)"));
 
-            Assert.Empty(await Runner().RunStageAsync(ScriptModule.TriggerAgent, agent, [before, after, credential], Guid.NewGuid(), log, CancellationToken.None));
+            Assert.Empty(await Runner().RunStageAsync("never", agent, [before, after, credential], Guid.NewGuid(), log, CancellationToken.None));
         }
         finally
         {
@@ -266,7 +270,6 @@ public class ScriptRunnerTests
 /// </summary>
 public sealed class ScriptHarnessTests : IDisposable
 {
-    private readonly SqliteConnection _connection;
     private readonly DbContextOptions<LooperDbContext> _options;
     private readonly string _dir;
     private readonly string _argsFile;
@@ -274,14 +277,13 @@ public sealed class ScriptHarnessTests : IDisposable
 
     public ScriptHarnessTests()
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
-        _connection.Open();
-        _options = new DbContextOptionsBuilder<LooperDbContext>().UseSqlite(_connection).Options;
-        using var db = new LooperDbContext(_options);
-        db.Database.EnsureCreated();
-
         _dir = Path.Combine(Path.GetTempPath(), $"looper-harness-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_dir);
+        // A file database: the run executes on background threads while the test polls, and a
+        // single shared in-memory connection is not safe for that — separate connections are.
+        _options = new DbContextOptionsBuilder<LooperDbContext>().UseSqlite($"Data Source={Path.Combine(_dir, "harness.db")}").Options;
+        using (var db = new LooperDbContext(_options)) db.Database.EnsureCreated();
+
         _argsFile = Path.Combine(_dir, "claude-args.txt");
         _fakeClaude = Path.Combine(_dir, "claude");
         File.WriteAllText(_fakeClaude,
@@ -292,7 +294,7 @@ public sealed class ScriptHarnessTests : IDisposable
 
     public void Dispose()
     {
-        _connection.Dispose();
+        SqliteConnection.ClearAllPools();
         try { Directory.Delete(_dir, recursive: true); } catch (IOException) { }
     }
 
@@ -311,13 +313,14 @@ public sealed class ScriptHarnessTests : IDisposable
         registry.RegisterBuiltIn(new ScriptModule());
         return new AgentRunCoordinator(
             new Factory(_options),
-            new ClaudeCliExecutor(looperOptions, registry,
+            new ClaudeCliExecutor(looperOptions, new ClaudeAuthProvider(new Factory(_options)), registry,
                 new GraphContextService(looperOptions, NullLogger<GraphContextService>.Instance),
                 NullLogger<ClaudeCliExecutor>.Instance),
             new SimulatedAgentExecutor(),
             new TestingActionRunner(looperOptions),
             new ScriptRunner(looperOptions),
-            new ReviewRunner(looperOptions, NullLogger<ReviewRunner>.Instance),
+            new MetricRecorder(new Factory(_options), NullLogger<MetricRecorder>.Instance),
+            new ReviewRunner(looperOptions, new ClaudeAuthProvider(new Factory(_options)), NullLogger<ReviewRunner>.Instance),
             new EventDispatcher(NullLogger<EventDispatcher>.Instance),
             looperOptions,
             NullLogger<AgentRunCoordinator>.Instance);
@@ -361,8 +364,7 @@ public sealed class ScriptHarnessTests : IDisposable
     {
         var (agentId, ids) = await SeedAgent(
             Script("Tickets", "before", "print('TICKETS: 42 open')"),
-            Script("Verify", "after", "print('all good')"),
-            Script("Helper", "agent", "print('on demand')"));
+            Script("Verify", "after", "print('all good')"));
         try
         {
             var runId = await CreateCoordinator().TriggerRunAsync(agentId, RunTrigger.Manual);
@@ -372,13 +374,12 @@ public sealed class ScriptHarnessTests : IDisposable
             Assert.True(run.TestsPassed);
             Assert.Contains("\"name\":\"Tickets\"", run.TestResultsJson);
             Assert.Contains("\"name\":\"Verify\"", run.TestResultsJson);
-            Assert.DoesNotContain("\"name\":\"Helper\"", run.TestResultsJson);  // on-demand scripts are the agent's call
 
             var args = await File.ReadAllTextAsync(_argsFile);
             Assert.Contains("SCRIPT OUTPUT", args);
             Assert.Contains("TICKETS: 42 open", args);
-            Assert.Contains("SCRIPT 'Helper' (python)", args);            // the on-demand protocol
-            Assert.Contains("LOOPER_SCRIPT_HELPER", args);
+            Assert.Contains("SCRIPT 'Verify' (python)", args);            // the gate is announced to the model
+            Assert.Contains("LOOPER_SCRIPT_VERIFY", args);
         }
         finally
         {
@@ -417,8 +418,9 @@ public sealed class ScriptHarnessTests : IDisposable
             var runId = await CreateCoordinator().TriggerRunAsync(agentId, RunTrigger.Manual);
             var run = await WaitForCompletion(runId!.Value);
 
-            Assert.Equal(RunStatus.Succeeded, run.Status);  // like a testing action: the gate verdict, not the run status
+            Assert.Equal(RunStatus.Failed, run.Status);     // a failed gate is a failed run — no green with a footnote
             Assert.False(run.TestsPassed);
+            Assert.Contains("Gate failed: 'Verify'", run.ErrorMessage);
             Assert.Contains("3 checks failed", run.TestResultsJson);
             Assert.True(File.Exists(_argsFile));
         }

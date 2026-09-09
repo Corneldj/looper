@@ -16,12 +16,19 @@ public sealed class GetUserActionsHandler(LooperDbContext db)
         var rows = await db.UserActionRequests
             .Where(r => query.AgentId == null || r.AgentId == query.AgentId)
             .Where(r => query.IncludeResolved || r.Status == UserActionStatus.Open)
-            .Select(r => new { Request = r, AgentName = r.Agent.Name })
+            .Select(r => new
+            {
+                Request = r,
+                AgentName = r.Agent.Name,
+                CanRecordToMemory = r.Agent.Resources.Any(res =>
+                    res.Type == ResourceType.Custom && res.CustomTypeKey != null
+                    && Modules.BuiltIn.GraphInfrastructure.MemoryTypeKeys.Contains(res.CustomTypeKey))
+            })
             .OrderByDescending(r => r.Request.CreatedAtUtc)
             .Take(200)
             .ToListAsync(cancellationToken);
 
-        return rows.Select(r => r.Request.ToDto(r.AgentName)).ToList();
+        return rows.Select(r => r.Request.ToDto(r.AgentName, r.CanRecordToMemory)).ToList();
     }
 }
 

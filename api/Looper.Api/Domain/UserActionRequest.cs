@@ -30,12 +30,12 @@ public class UserActionRequest
     /// <summary>Whether this request parks the agent's schedule until resolved.</summary>
     public bool Blocking { get; set; } = true;
 
-    /// <summary>The user's answer, passed to the next run after resolution.</summary>
+    /// <summary>The user's answer. Never injected into a prompt: it is recorded into a resource (or nowhere).</summary>
     public string? Response { get; set; }
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? ResolvedAtUtc { get; set; }
 
-    /// <summary>Set once the response has been injected into a real run's prompt.</summary>
-    public DateTime? ResponseDeliveredAtUtc { get; set; }
+    /// <summary>Where the answer went — "Recorded as a standing rule in '…'", the memory inbox, or nothing.</summary>
+    public string? ResolutionNote { get; set; }
 }

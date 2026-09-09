@@ -19,7 +19,7 @@ public sealed record ReviewVerdict(
 /// neither invokes nor sees the reviewer — the harness does, and the harness gates.
 /// An unparseable verdict fails closed: a gate that shrugs is not a gate.
 /// </summary>
-public sealed class ReviewRunner(IOptions<LooperOptions> options, ILogger<ReviewRunner> logger)
+public sealed class ReviewRunner(IOptions<LooperOptions> options, ClaudeAuthProvider claudeAuth, ILogger<ReviewRunner> logger)
 {
     public async Task<ReviewVerdict> ReviewAsync(
         LoopAgent agent,
@@ -57,6 +57,16 @@ public sealed class ReviewRunner(IOptions<LooperOptions> options, ILogger<Review
         {
             startInfo.ArgumentList.Add("--add-dir");
             startInfo.ArgumentList.Add(dir);
+        }
+
+        try
+        {
+            await claudeAuth.ApplyAsync(startInfo, cancellationToken);
+        }
+        catch (ClaudeAuthException ex)
+        {
+            await log("error", $"Reviewer cannot start: {ex.Message}");
+            return new ReviewVerdict(false, "Reviewer could not start.", null, 0, Inconclusive: true);
         }
 
         using var process = new Process { StartInfo = startInfo };

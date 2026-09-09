@@ -1,8 +1,10 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, inject, linkedSignal, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { catchError, forkJoin, map, of, switchMap, timer } from 'rxjs';
 import { ApiService } from '../../core/api.service';
+import { WorkflowsStore } from '../../core/stores';
 import {
   AgentBreakdownDto,
   CostSeriesPointDto,
@@ -21,6 +23,7 @@ import {
 import { SpendChart } from './spend-chart';
 import { BarList, BarListRow, OTHER_COLOR, SERIES_COLORS } from './bar-list';
 import { DeliverySection } from './delivery-section/delivery-section';
+import { MetricsSection } from './metrics-section/metrics-section';
 
 interface Trend {
   dir: 'up' | 'down' | 'flat';
@@ -30,15 +33,22 @@ interface Trend {
 
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, SpendChart, BarList, DeliverySection],
+  imports: [RouterLink, FormsModule, SpendChart, BarList, DeliverySection, MetricsSection],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
 export class Dashboard {
   private readonly api = inject(ApiService);
+  protected readonly workflowsStore = inject(WorkflowsStore);
 
   protected readonly periods: readonly number[] = [7, 14, 30];
   protected readonly days = signal(14);
+
+  /** Workflow filter: follows the topbar selection, can be widened to all workflows (null). */
+  protected readonly workflowFilter = linkedSignal<string | null>(() => this.workflowsStore.selectedId());
+
+  /** Everything the queries depend on, so one change refetches once. */
+  private readonly scope = computed(() => ({ days: this.days(), workflowId: this.workflowFilter() }));
 
   protected readonly summary = signal<DashboardSummaryDto | null>(null);
   protected readonly series = signal<CostSeriesPointDto[]>([]);
@@ -63,14 +73,14 @@ export class Dashboard {
   protected readonly relativeTime = relativeTime;
 
   constructor() {
-    // Summary + series: refetch on period change, poll every 30s.
-    toObservable(this.days)
+    // Summary + series: refetch on period/workflow change, poll every 30s.
+    toObservable(this.scope)
       .pipe(
-        switchMap(days => timer(0, 30_000).pipe(map(() => days))),
-        switchMap(days =>
+        switchMap(scope => timer(0, 30_000).pipe(map(() => scope))),
+        switchMap(({ days, workflowId }) =>
           forkJoin({
-            summary: this.api.getDashboardSummary(days).pipe(catchError(() => of(null))),
-            series: this.api.getCostSeries(days).pipe(catchError(() => of(null))),
+            summary: this.api.getDashboardSummary(days, workflowId).pipe(catchError(() => of(null))),
+            series: this.api.getCostSeries(days, workflowId).pipe(catchError(() => of(null))),
           }),
         ),
         takeUntilDestroyed(),
@@ -83,14 +93,14 @@ export class Dashboard {
         if (summary || series) this.loadedOnce.set(true);
       });
 
-    // Breakdown, model usage and failures: refetch on period change.
-    toObservable(this.days)
+    // Breakdown, model usage and failures: refetch on period/workflow change.
+    toObservable(this.scope)
       .pipe(
-        switchMap(() =>
+        switchMap(({ days, workflowId }) =>
           forkJoin({
-            breakdown: this.api.getAgentBreakdown(this.days()).pipe(catchError(() => of(null))),
-            models: this.api.getModelUsage(this.days()).pipe(catchError(() => of(null))),
-            failures: this.api.getRecentFailures(8).pipe(catchError(() => of(null))),
+            breakdown: this.api.getAgentBreakdown(days, workflowId).pipe(catchError(() => of(null))),
+            models: this.api.getModelUsage(days, workflowId).pipe(catchError(() => of(null))),
+            failures: this.api.getRecentFailures(8, workflowId).pipe(catchError(() => of(null))),
           }),
         ),
         takeUntilDestroyed(),
@@ -107,6 +117,13 @@ export class Dashboard {
     if (days === this.days()) return;
     this.refreshing.set(true);
     this.days.set(days);
+  }
+
+  protected setWorkflow(id: string): void {
+    const next = id || null;
+    if (next === this.workflowFilter()) return;
+    this.refreshing.set(true);
+    this.workflowFilter.set(next);
   }
 
   // ---------- KPI tiles ----------

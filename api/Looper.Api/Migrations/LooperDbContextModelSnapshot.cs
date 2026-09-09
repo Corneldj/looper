@@ -224,6 +224,24 @@ namespace Looper.Api.Migrations
                     b.ToTable("Runs");
                 });
 
+            modelBuilder.Entity("Looper.Api.Domain.AppSetting", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("Settings");
+                });
+
             modelBuilder.Entity("Looper.Api.Domain.EventDelivery", b =>
                 {
                     b.Property<Guid>("Id")
@@ -330,10 +348,15 @@ namespace Looper.Api.Migrations
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("WorkflowId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("WorkingDirectory")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("WorkflowId");
 
                     b.ToTable("Agents");
                 });
@@ -430,6 +453,45 @@ namespace Looper.Api.Migrations
                     b.ToTable("Workspaces");
                 });
 
+            modelBuilder.Entity("Looper.Api.Domain.MetricValue", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("AgentId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("RecordedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("RunId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("Value")
+                        .HasColumnType("REAL");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentId");
+
+                    b.HasIndex("ResourceId", "RecordedAtUtc");
+
+                    b.ToTable("MetricValues");
+                });
+
             modelBuilder.Entity("Looper.Api.Domain.Resource", b =>
                 {
                     b.Property<Guid>("Id")
@@ -464,9 +526,14 @@ namespace Looper.Api.Migrations
                     b.Property<DateTime>("UpdatedAtUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("WorkflowId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Type");
+
+                    b.HasIndex("WorkflowId");
 
                     b.ToTable("Resources");
                 });
@@ -566,13 +633,13 @@ namespace Looper.Api.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ResolutionNote")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime?>("ResolvedAtUtc")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Response")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("ResponseDeliveredAtUtc")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid?>("RunId")
@@ -593,6 +660,42 @@ namespace Looper.Api.Migrations
                     b.HasIndex("AgentId", "Status");
 
                     b.ToTable("UserActionRequests");
+                });
+
+            modelBuilder.Entity("Looper.Api.Domain.Workflow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Workflows");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("00000000-0000-0000-0000-000000000001"),
+                            CreatedAtUtc = new DateTime(2026, 9, 9, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Description = "The original workbench. Rename it, or create more workflows for other loops.",
+                            Name = "Default",
+                            UpdatedAtUtc = new DateTime(2026, 9, 9, 0, 0, 0, 0, DateTimeKind.Utc)
+                        });
                 });
 
             modelBuilder.Entity("LoopAgentResource", b =>
@@ -651,6 +754,17 @@ namespace Looper.Api.Migrations
                     b.Navigation("Event");
                 });
 
+            modelBuilder.Entity("Looper.Api.Domain.LoopAgent", b =>
+                {
+                    b.HasOne("Looper.Api.Domain.Workflow", "Workflow")
+                        .WithMany("Agents")
+                        .HasForeignKey("WorkflowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Workflow");
+                });
+
             modelBuilder.Entity("Looper.Api.Domain.ManagedWorkspace", b =>
                 {
                     b.HasOne("Looper.Api.Domain.Resource", "Resource")
@@ -660,6 +774,33 @@ namespace Looper.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Resource");
+                });
+
+            modelBuilder.Entity("Looper.Api.Domain.MetricValue", b =>
+                {
+                    b.HasOne("Looper.Api.Domain.LoopAgent", null)
+                        .WithMany()
+                        .HasForeignKey("AgentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Looper.Api.Domain.Resource", "Resource")
+                        .WithMany()
+                        .HasForeignKey("ResourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Resource");
+                });
+
+            modelBuilder.Entity("Looper.Api.Domain.Resource", b =>
+                {
+                    b.HasOne("Looper.Api.Domain.Workflow", "Workflow")
+                        .WithMany("Resources")
+                        .HasForeignKey("WorkflowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Workflow");
                 });
 
             modelBuilder.Entity("Looper.Api.Domain.RunLogEntry", b =>
@@ -692,6 +833,13 @@ namespace Looper.Api.Migrations
             modelBuilder.Entity("Looper.Api.Domain.LoopAgent", b =>
                 {
                     b.Navigation("Runs");
+                });
+
+            modelBuilder.Entity("Looper.Api.Domain.Workflow", b =>
+                {
+                    b.Navigation("Agents");
+
+                    b.Navigation("Resources");
                 });
 #pragma warning restore 612, 618
         }

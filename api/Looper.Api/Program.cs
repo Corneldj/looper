@@ -37,11 +37,13 @@ builder.Services.Decorate(typeof(ICommandHandler<,>), typeof(LoggingCommandHandl
 builder.Services.Decorate(typeof(IQueryHandler<,>), typeof(LoggingQueryHandlerDecorator<,>));
 
 // Execution engine.
+builder.Services.AddSingleton<ClaudeAuthProvider>();
 builder.Services.AddSingleton<ClaudeCliExecutor>();
 builder.Services.AddSingleton<SimulatedAgentExecutor>();
 builder.Services.AddSingleton<TestingActionRunner>();
 builder.Services.AddSingleton<ScriptRunner>();
 builder.Services.AddSingleton<ScriptAssistant>();
+builder.Services.AddSingleton<MetricRecorder>();
 builder.Services.AddSingleton<ReviewRunner>();
 builder.Services.AddSingleton<EventDispatcher>();
 builder.Services.AddSingleton<GraphContextService>();
@@ -62,7 +64,8 @@ builder.Services.AddHostedService<Looper.Api.Infrastructure.Delivery.DeliverySyn
 builder.Services.AddSingleton<Looper.Api.Modules.ResourceModuleCompiler>();
 builder.Services.AddSingleton<Looper.Api.Modules.ResourceModuleRegistry>();
 builder.Services.AddSingleton<Looper.Api.Modules.ResourceModuleInstaller>();
-builder.Services.AddSingleton<Looper.Api.Modules.ClaudeModuleSourceGenerator>();
+builder.Services.AddSingleton<Looper.Api.Modules.IModuleSourceGenerator, Looper.Api.Modules.ClaudeModuleSourceGenerator>();
+builder.Services.AddSingleton<Looper.Api.Features.ResourceTypes.ResourceTypeGenerationJobs>();
 
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
     .WithOrigins("http://localhost:4200")
@@ -122,6 +125,9 @@ await using (var scope = app.Services.CreateAsyncScope())
     registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.ExecutionGraphModule());
     registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.SpecificationModule());
     registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.ScriptModule());
+    registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.MetricModule());
+    registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.EventRaiserModule());
+    registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.EventListenerModule());
 
     var moduleRecords = await db.ResourceModules.AsNoTracking().ToListAsync();
     await registry.ReconcileAsync(moduleRecords, scope.ServiceProvider.GetRequiredService<Looper.Api.Modules.ResourceModuleCompiler>());

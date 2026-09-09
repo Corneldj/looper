@@ -71,7 +71,7 @@ describe('ArchitectModal', () => {
 
     const build = http.expectOne(`${API_BASE}/architect/build`);
     expect(build.request.method).toBe('POST');
-    expect(build.request.body).toEqual({ description: 'A nightly loop that keeps the docs in sync with the repo.' });
+    expect(build.request.body).toEqual({ description: 'A nightly loop that keeps the docs in sync with the repo.', workflowId: null });
     build.flush(architectResult());
 
     // Success refreshes the workbench behind the modal before the result is shown.

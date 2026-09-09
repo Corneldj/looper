@@ -15,6 +15,19 @@ public sealed class TestingActionRunner(IOptions<LooperOptions> options)
     public static string Serialize(IEnumerable<TestingActionResult> results) =>
         JsonSerializer.Serialize(results, JsonOptions);
 
+    public static IReadOnlyList<TestingActionResult> Deserialize(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        try
+        {
+            return JsonSerializer.Deserialize<List<TestingActionResult>>(json, JsonOptions) ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
     public async Task<(string ResultsJson, bool AllPassed)?> RunAllAsync(
         LoopAgent agent, IReadOnlyList<Resource> resources, RunLogWriter log, CancellationToken cancellationToken)
     {
@@ -38,7 +51,9 @@ public sealed class TestingActionRunner(IOptions<LooperOptions> options)
             var config = ResourceConfig.Parse<TestingActionConfig>(action);
             if (string.IsNullOrWhiteSpace(config.Command))
             {
-                await log("warn", $"Testing action '{action.Name}' has no command configured; skipped.");
+                // A gate with nothing to run cannot pass anything: fail closed instead of skipping.
+                await log("error", $"Testing action '{action.Name}' has no command configured — failing closed.");
+                results.Add(new TestingActionResult(action.Name, "", -1, false, 0, "No command configured — a gate that cannot run fails closed."));
                 continue;
             }
 

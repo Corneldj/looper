@@ -1,7 +1,7 @@
 import { Component, inject, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
-import { AgentsStore, ResourcesStore } from '../../core/stores';
+import { AgentsStore, ResourcesStore, WorkflowsStore } from '../../core/stores';
 import { ArchitectResultDto } from '../../core/models';
 
 /**
@@ -20,6 +20,7 @@ export class ArchitectModal {
   private readonly api = inject(ApiService);
   private readonly agentsStore = inject(AgentsStore);
   private readonly resourcesStore = inject(ResourcesStore);
+  private readonly workflowsStore = inject(WorkflowsStore);
 
   readonly closed = output<void>();
 
@@ -39,7 +40,7 @@ export class ArchitectModal {
     if (description.length < 10 || this.busy()) return;
     this.busy.set(true);
     this.error.set(null);
-    this.api.buildWorkflow(description).subscribe({
+    this.api.buildWorkflow(description, this.workflowsStore.selectedId()).subscribe({
       next: result => {
         this.busy.set(false);
         if (result.success) {

@@ -15,13 +15,18 @@ public sealed record UserActionDto(
     bool Blocking,
     string? Response,
     DateTime CreatedAtUtc,
-    DateTime? ResolvedAtUtc);
+    DateTime? ResolvedAtUtc,
+    /// <summary>Where the answer was recorded when resolved.</summary>
+    string? ResolutionNote,
+    /// <summary>The agent has a memory graph attached, so an answer may be recorded there instead of as a rule.</summary>
+    bool CanRecordToMemory);
 
 public static class UserActionMapper
 {
-    public static UserActionDto ToDto(this UserActionRequest request, string agentName) => new(
+    public static UserActionDto ToDto(this UserActionRequest request, string agentName, bool canRecordToMemory) => new(
         request.Id, request.AgentId, agentName, request.RunId, request.Title, request.Details,
-        request.Status, request.Blocking, request.Response, request.CreatedAtUtc, request.ResolvedAtUtc);
+        request.Status, request.Blocking, request.Response, request.CreatedAtUtc, request.ResolvedAtUtc,
+        request.ResolutionNote, canRecordToMemory);
 }
 
 /// <summary>The one question the scheduler and Run-now both ask: is this loop parked on a human?</summary>

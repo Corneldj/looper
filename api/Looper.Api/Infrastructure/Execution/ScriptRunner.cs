@@ -23,7 +23,7 @@ public sealed class ScriptRunner(IOptions<LooperOptions> options)
         string trigger, LoopAgent agent, IReadOnlyList<Resource> resources, Guid runId,
         RunLogWriter log, CancellationToken cancellationToken)
     {
-        var scripts = ScriptResources.Scripts(resources, trigger);
+        var scripts = ScriptResources.Scripts(resources, trigger, includeEmpty: true);
         if (scripts.Count == 0) return [];
 
         var (defaultWorkingDirectory, _) = AgentWorkspace.Resolve(agent, resources);
@@ -36,6 +36,12 @@ public sealed class ScriptRunner(IOptions<LooperOptions> options)
         var results = new List<TestingActionResult>();
         foreach (var (resource, config) in scripts)
         {
+            if (config.Code.Length == 0)
+            {
+                await log("error", $"Script '{resource.Name}' has no code — failing closed.");
+                results.Add(new TestingActionResult(resource.Name, "", -1, false, 0, "The script has no code — a stage that cannot run fails closed."));
+                continue;
+            }
             await log("info", $"Running {stageLabel} script '{resource.Name}'.");
             var result = await RunAsync(resource.Id, resource.Name, config, defaultWorkingDirectory, environment,
                 cancellationToken, trigger == ScriptModule.TriggerBefore ? BeforeOutputCap : ShellCommandRunner.DefaultOutputCap);

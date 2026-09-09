@@ -15,15 +15,36 @@ public class LooperDbContext(DbContextOptions<LooperDbContext> options) : DbCont
     public DbSet<UserActionRequest> UserActionRequests => Set<UserActionRequest>();
     public DbSet<LooperEvent> Events => Set<LooperEvent>();
     public DbSet<EventDelivery> EventDeliveries => Set<EventDelivery>();
+    public DbSet<MetricValue> MetricValues => Set<MetricValue>();
+    public DbSet<Workflow> Workflows => Set<Workflow>();
+    public DbSet<AppSetting> Settings => Set<AppSetting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<Workflow>(workflow =>
+        {
+            workflow.Property(w => w.Name).HasMaxLength(200);
+            workflow.HasMany(w => w.Resources).WithOne(r => r.Workflow).HasForeignKey(r => r.WorkflowId).OnDelete(DeleteBehavior.Cascade);
+            workflow.HasMany(w => w.Agents).WithOne(a => a.Workflow).HasForeignKey(a => a.WorkflowId).OnDelete(DeleteBehavior.Cascade);
+            // The default workflow is seeded with the schema: everything from before workflows
+            // lands in it, and a fresh install has somewhere to put the first resource.
+            workflow.HasData(new Workflow
+            {
+                Id = Workflow.DefaultId,
+                Name = "Default",
+                Description = "The original workbench. Rename it, or create more workflows for other loops.",
+                CreatedAtUtc = new DateTime(2026, 9, 9, 0, 0, 0, DateTimeKind.Utc),
+                UpdatedAtUtc = new DateTime(2026, 9, 9, 0, 0, 0, DateTimeKind.Utc)
+            });
+        });
+
         modelBuilder.Entity<Resource>(resource =>
         {
             resource.Property(r => r.Name).HasMaxLength(200);
             resource.Property(r => r.Type).HasConversion<string>().HasMaxLength(40);
             resource.Property(r => r.CustomTypeKey).HasMaxLength(100);
             resource.HasIndex(r => r.Type);
+            resource.HasIndex(r => r.WorkflowId);
         });
 
         modelBuilder.Entity<AgentPullRequest>(pr =>
@@ -36,6 +57,16 @@ public class LooperDbContext(DbContextOptions<LooperDbContext> options) : DbCont
             pr.HasIndex(p => p.Url);
             pr.HasIndex(p => p.Status);
             pr.HasOne(p => p.Agent).WithMany().HasForeignKey(p => p.AgentId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MetricValue>(value =>
+        {
+            value.Property(v => v.Note).HasMaxLength(500);
+            value.Property(v => v.Source).HasConversion<string>().HasMaxLength(20);
+            value.HasIndex(v => new { v.ResourceId, v.RecordedAtUtc });
+            value.HasOne(v => v.Resource).WithMany().HasForeignKey(v => v.ResourceId).OnDelete(DeleteBehavior.Cascade);
+            // Measurements outlive the agent that made them; the attribution just goes blank.
+            value.HasOne<LoopAgent>().WithMany().HasForeignKey(v => v.AgentId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<LooperEvent>(evt =>
@@ -84,6 +115,7 @@ public class LooperDbContext(DbContextOptions<LooperDbContext> options) : DbCont
             agent.Property(a => a.Name).HasMaxLength(200);
             agent.Property(a => a.Model).HasMaxLength(100);
             agent.Property(a => a.Effort).HasConversion<string>().HasMaxLength(20);
+            agent.HasIndex(a => a.WorkflowId);
             agent.HasMany(a => a.Resources).WithMany(r => r.Agents);
             agent.HasMany(a => a.Runs).WithOne(r => r.Agent!).HasForeignKey(r => r.AgentId)
                 .OnDelete(DeleteBehavior.Cascade);
@@ -97,6 +129,12 @@ public class LooperDbContext(DbContextOptions<LooperDbContext> options) : DbCont
             run.HasIndex(r => new { r.AgentId, r.StartedAtUtc });
             run.HasMany(r => r.Logs).WithOne(l => l.Run!).HasForeignKey(l => l.RunId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AppSetting>(setting =>
+        {
+            setting.HasKey(s => s.Key);
+            setting.Property(s => s.Key).HasMaxLength(100);
         });
 
         modelBuilder.Entity<RunLogEntry>(log =>

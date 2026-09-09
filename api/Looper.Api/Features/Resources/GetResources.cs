@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Looper.Api.Features.Resources;
 
-public sealed record GetResourcesQuery(ResourceType? Type) : IQuery<IReadOnlyList<ResourceDto>>;
+public sealed record GetResourcesQuery(ResourceType? Type, Guid? WorkflowId = null) : IQuery<IReadOnlyList<ResourceDto>>;
 
 public sealed class GetResourcesHandler(LooperDbContext db, Looper.Api.Modules.ResourceModuleRegistry registry)
     : IQueryHandler<GetResourcesQuery, IReadOnlyList<ResourceDto>>
@@ -15,6 +15,7 @@ public sealed class GetResourcesHandler(LooperDbContext db, Looper.Api.Modules.R
     {
         var resources = await db.Resources
             .Where(r => query.Type == null || r.Type == query.Type)
+            .Where(r => query.WorkflowId == null || r.WorkflowId == query.WorkflowId)
             .Select(r => new { Resource = r, AgentCount = r.Agents.Count })
             .OrderBy(r => r.Resource.Type).ThenBy(r => r.Resource.Name)
             .ToListAsync(cancellationToken);
@@ -26,6 +27,6 @@ public sealed class GetResourcesHandler(LooperDbContext db, Looper.Api.Modules.R
 public sealed class GetResourcesEndpoint : IEndpoint
 {
     public void Map(IEndpointRouteBuilder app) =>
-        app.MapGet("/api/resources", (ResourceType? type, IDispatcher dispatcher, CancellationToken ct) =>
-            dispatcher.Query(new GetResourcesQuery(type), ct));
+        app.MapGet("/api/resources", (ResourceType? type, Guid? workflowId, IDispatcher dispatcher, CancellationToken ct) =>
+            dispatcher.Query(new GetResourcesQuery(type, workflowId), ct));
 }

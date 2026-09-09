@@ -7,22 +7,21 @@ namespace Looper.Api.Modules.BuiltIn;
 /// A runnable script (Python or Bash) kept as a resource: written in the editor — with Claude's
 /// help if wanted — and executed as part of an agent's loop. The script is the deterministic
 /// half of a loop: fetch inputs, transform data, verify outputs, notify, all without spending
-/// tokens. Three ways to wire it in: the agent runs it on demand, the harness runs it BEFORE
-/// every iteration and feeds its output into the prompt, or the harness runs it AFTER every
-/// iteration as a gate (non-zero exit fails the run, exactly like a Testing Action).
+/// tokens. It always runs deterministically, by the harness: BEFORE every iteration with its
+/// output fed into the prompt, or AFTER every iteration as a gate (non-zero exit fails the
+/// run, exactly like a Testing Action). The model never decides whether it runs.
 /// </summary>
 public sealed class ScriptModule : IResourceTypeModule
 {
     public const string TypeKey_ = "Script";
 
-    public const string TriggerAgent = "agent";
     public const string TriggerBefore = "before";
     public const string TriggerAfter = "after";
 
     public string TypeKey => TypeKey_;
     public string DisplayName => "Script";
     public string Icon => "📜";
-    public string Blurb => "A Python or Bash script the agent can run, or that runs before/after every loop — write it with Claude's help, test it in place.";
+    public string Blurb => "A Python or Bash script Looper runs before or after every loop iteration — write it with Claude's help, test it in place.";
 
     public IReadOnlyList<ResourceField> Fields { get; } =
     [
@@ -32,9 +31,9 @@ public sealed class ScriptModule : IResourceTypeModule
             Hint: "The script itself. It runs with LOOPER_API_URL, LOOPER_RUN_ID and LOOPER_AGENT_ID set, plus any " +
                   "credential resources attached to the same agent.",
             Placeholder: "#!/usr/bin/env python3\nimport json, sys\nprint(json.dumps({\"ok\": True}))"),
-        new("trigger", "When it runs", ResourceFieldKind.Select, Required: true, Options: [TriggerAgent, TriggerBefore, TriggerAfter],
-            Hint: "agent = the agent runs it when it decides to · before = Looper runs it before every iteration and " +
-                  "hands the output to the agent · after = Looper runs it after every iteration as a gate (non-zero exit fails the run)."),
+        new("trigger", "When it runs", ResourceFieldKind.Select, Required: true, Options: [TriggerBefore, TriggerAfter],
+            Hint: "before = Looper runs it before every iteration and hands the output to the model · " +
+                  "after = Looper runs it after every iteration as a gate (non-zero exit fails the run). Always deterministic."),
         new("args", "Default arguments", ResourceFieldKind.Text,
             Hint: "Appended to the command line when Looper runs the script (shell syntax).", Placeholder: "--verbose"),
         new("timeoutSeconds", "Timeout (s)", ResourceFieldKind.Number,
@@ -68,12 +67,9 @@ public sealed class ScriptModule : IResourceTypeModule
         var runHint = config.Language == ScriptLanguage.Bash
             ? $"bash \"${env}\""
             : $"python3 \"${env}\"";
-        var whenNote = config.Trigger switch
-        {
-            TriggerBefore => "Looper already ran it before this iteration — its output is in the SCRIPT OUTPUT section of this prompt. You may re-run it if you need fresh results.",
-            TriggerAfter => "Looper runs it after this iteration as a gate: a non-zero exit fails the run. Run it yourself before you finish to make sure it passes.",
-            _ => "Run it whenever your task calls for it."
-        };
+        var whenNote = config.Trigger == TriggerAfter
+            ? "Looper runs it after this iteration as a gate: a non-zero exit fails the run. Run it yourself before you finish to make sure it passes."
+            : "Looper already ran it before this iteration — its output is in the SCRIPT OUTPUT section of this prompt. You may re-run it if you need fresh results.";
 
         contribution.PromptSections.Add(
             $"SCRIPT '{context.ResourceName}' ({config.Language.ToString().ToLowerInvariant()}) at {path} (also ${env}).{purpose} " +
@@ -119,12 +115,11 @@ public static class ScriptResources
     public static ScriptConfig Parse(string? language, string? code, string? trigger, string? args,
         double? timeoutSeconds, string? workingDirectory)
     {
-        var normalizedTrigger = trigger?.Trim().ToLowerInvariant() switch
-        {
-            ScriptModule.TriggerBefore => ScriptModule.TriggerBefore,
-            ScriptModule.TriggerAfter => ScriptModule.TriggerAfter,
-            _ => ScriptModule.TriggerAgent
-        };
+        // Before or after — never "when the model feels like it". Anything else (including the
+        // retired on-demand mode) runs before, the safe default: its output informs the model.
+        var normalizedTrigger = string.Equals(trigger?.Trim(), ScriptModule.TriggerAfter, StringComparison.OrdinalIgnoreCase)
+            ? ScriptModule.TriggerAfter
+            : ScriptModule.TriggerBefore;
         return new ScriptConfig(
             Language: ParseLanguage(language),
             Code: code ?? "",
@@ -137,14 +132,17 @@ public static class ScriptResources
     public static ScriptLanguage ParseLanguage(string? language) =>
         string.Equals(language?.Trim(), "bash", StringComparison.OrdinalIgnoreCase) ? ScriptLanguage.Bash : ScriptLanguage.Python;
 
-    /// <summary>The Script resources attached to an agent, parsed; optionally only one trigger stage.</summary>
+    /// <summary>
+    /// The Script resources attached to an agent, parsed; optionally only one trigger stage.
+    /// Empty scripts are left out unless asked for — the harness asks, so it can fail them closed.
+    /// </summary>
     public static IReadOnlyList<(Resource Resource, ScriptConfig Config)> Scripts(
-        IEnumerable<Resource> resources, string? trigger = null) =>
+        IEnumerable<Resource> resources, string? trigger = null, bool includeEmpty = false) =>
         resources
             .Where(r => r.Type == ResourceType.Custom &&
                         string.Equals(r.CustomTypeKey, ScriptModule.TypeKey_, StringComparison.OrdinalIgnoreCase))
             .Select(r => (Resource: r, Config: Parse(new ResourceModuleContext(r.ConfigJson))))
-            .Where(s => s.Config.Code.Length > 0 && (trigger is null || s.Config.Trigger == trigger))
+            .Where(s => (includeEmpty || s.Config.Code.Length > 0) && (trigger is null || s.Config.Trigger == trigger))
             .ToList();
 
     public static string Slug(string name)

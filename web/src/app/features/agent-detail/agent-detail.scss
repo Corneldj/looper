@@ -121,6 +121,37 @@
   word-break: break-word;
 }
 
+.record-as {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 4px;
+}
+
+.record-as-label,
+.record-as-note {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.record-as-note { display: block; margin: 8px 0 4px; }
+
+.record-option {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+
+  &.selected { border-color: var(--accent); background: var(--accent-soft); }
+
+  .record-title { font-size: 13px; font-weight: 600; }
+  .record-hint { font-size: 12px; color: var(--text-3); }
+}
+
 .user-action-actions {
   display: flex;
   justify-content: flex-end;

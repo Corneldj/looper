@@ -52,25 +52,31 @@ public class UserActionProtocolTests
     }
 
     [Fact]
-    public void User_responses_are_injected_before_the_protocol_section()
+    public void The_protocol_says_answers_arrive_as_resources_not_as_carried_context()
     {
-        var agent = new LoopAgent { Name = "Worker", Prompt = "Base task." };
-        var resources = new[]
+        var protocol = ClaudeCliExecutor.BuildUserActionProtocol(new UserActionConfig());
+
+        Assert.Contains("clean context", protocol);
+        Assert.Contains("never handed to you as a message", protocol);
+        Assert.Contains("standing rule", protocol);
+        Assert.Contains("raise a new request", protocol);
+    }
+
+    [Fact]
+    public void A_recorded_decision_reaches_the_next_run_through_its_rule_set_like_any_other_rule()
+    {
+        // The deterministic path: the answer is a rule in "<agent> decisions", so CollectRules —
+        // the same function every real run's system prompt is built from — carries it.
+        var decisions = new Resource
         {
-            new Resource { Name = "Ask me", Type = ResourceType.UserAction, ConfigJson = "{}" }
+            Name = "Worker decisions", Type = ResourceType.RuleSet,
+            ConfigJson = """{"rules":[{"text":"Use Postgres (the user's decision on: Which database?)","enabled":true}]}"""
         };
 
-        var prompt = ClaudeCliExecutor.BuildPrompt(agent, resources, Array.Empty<ResourceContribution>(),
-            fixInstructions: null, userResponses: "answer-xyz");
+        var rules = ClaudeCliExecutor.CollectRules([decisions], []).ToList();
 
-        Assert.Contains("USER RESPONSES", prompt);
-        Assert.Contains("answer-xyz", prompt);
-
-        // The answer must be read before the standing "how to raise" instructions.
-        var answerIndex = prompt.IndexOf("answer-xyz", StringComparison.Ordinal);
-        var protocolIndex = prompt.IndexOf("USER ACTION REQUESTS", StringComparison.Ordinal);
-        Assert.True(answerIndex >= 0 && protocolIndex >= 0);
-        Assert.True(answerIndex < protocolIndex, "user responses should precede the raise protocol");
+        Assert.Contains("Use Postgres (the user's decision on: Which database?)", rules);
+        Assert.DoesNotContain("USER RESPONSES", ClaudeCliExecutor.BuildPrompt(new LoopAgent { Prompt = "Base task." }, [decisions], []));
     }
 }
 
@@ -84,7 +90,10 @@ public class UserActionApiTests(LooperApiFactory factory) : IClassFixture<Looper
     private sealed record RunResponse(Guid Id, string Status, bool ActionRequested);
     private sealed record UserActionResponse(
         Guid Id, Guid AgentId, string AgentName, Guid? RunId, string Title, string Details,
-        string Status, bool Blocking, string? Response, DateTime CreatedAtUtc, DateTime? ResolvedAtUtc);
+        string Status, bool Blocking, string? Response, DateTime CreatedAtUtc, DateTime? ResolvedAtUtc,
+        string? ResolutionNote, bool CanRecordToMemory);
+    private sealed record RuleSetResponse(Guid Id, string Name, string Type, string ConfigJson);
+    private sealed record AgentDetailResponse(Guid Id, List<Guid> ResourceIds);
 
     private async Task<AgentResponse> CreateAgent(string name, params Guid[] resourceIds)
     {
@@ -203,6 +212,7 @@ public class UserActionApiTests(LooperApiFactory factory) : IClassFixture<Looper
             Assert.Equal("Resolved", resolved!.Status);
             Assert.Equal("Credentials are in the vault under /staging.", resolved.Response);
             Assert.NotNull(resolved.ResolvedAtUtc);
+            Assert.Contains("standing rule", resolved.ResolutionNote);
             Assert.Empty(await ListOpen(agent.Id));
 
             // With the request resolved, run-now goes through (dry run — simulated).
@@ -215,6 +225,91 @@ public class UserActionApiTests(LooperApiFactory factory) : IClassFixture<Looper
         finally
         {
             await DeleteAgent(agent.Id);
+        }
+    }
+
+    [Fact]
+    public async Task An_answer_becomes_a_rule_in_the_agents_own_decisions_set_which_grows_on_every_decision()
+    {
+        var agent = await CreateAgent("UA decisions agent");
+        try
+        {
+            var first = await Raise(new { agentId = agent.Id, title = "Which database?", details = "" });
+            var resolved = await (await _client.PostAsJsonAsync($"/api/user-actions/{first.Id}/resolve",
+                new { response = "Use Postgres.", recordAs = "rule" }, TestJson.Options)).Content.ReadFromJsonAsync<UserActionResponse>(TestJson.Options);
+            Assert.Equal("Recorded as a standing rule in 'UA decisions agent decisions'.", resolved!.ResolutionNote);
+
+            var second = await Raise(new { agentId = agent.Id, title = "Which region?", details = "" });
+            (await _client.PostAsJsonAsync($"/api/user-actions/{second.Id}/resolve", new { response = "eu-west-1" }, TestJson.Options)).EnsureSuccessStatusCode();
+
+            // One rule set, attached to the agent, carrying both decisions in order — the next run's system prompt.
+            var sets = (await _client.GetFromJsonAsync<List<RuleSetResponse>>("/api/resources?type=RuleSet", TestJson.Options))!
+                .Where(r => r.Name == "UA decisions agent decisions").ToList();
+            var set = Assert.Single(sets);
+            Assert.Contains("Use Postgres. (the user's decision on: Which database?)", set.ConfigJson);
+            Assert.Contains("eu-west-1 (the user's decision on: Which region?)", set.ConfigJson);
+            var detail = await _client.GetFromJsonAsync<AgentDetailResponse>($"/api/agents/{agent.Id}", TestJson.Options);
+            Assert.Contains(set.Id, detail!.ResourceIds);
+
+            // No answer, or "none": completed without touching any resource.
+            var third = await Raise(new { agentId = agent.Id, title = "Rotate the key", details = "" });
+            var silent = await (await _client.PostAsJsonAsync($"/api/user-actions/{third.Id}/resolve", new { response = "" }, TestJson.Options)).Content.ReadFromJsonAsync<UserActionResponse>(TestJson.Options);
+            Assert.Contains("nothing recorded", silent!.ResolutionNote);
+            var fourth = await Raise(new { agentId = agent.Id, title = "Approve the copy", details = "" });
+            var kept = await (await _client.PostAsJsonAsync($"/api/user-actions/{fourth.Id}/resolve", new { response = "Approved.", recordAs = "none" }, TestJson.Options)).Content.ReadFromJsonAsync<UserActionResponse>(TestJson.Options);
+            Assert.Contains("not handed to the agent", kept!.ResolutionNote);
+            Assert.Equal(2, ResourceConfigRules((await _client.GetFromJsonAsync<List<RuleSetResponse>>("/api/resources?type=RuleSet", TestJson.Options))!.Single(r => r.Id == set.Id).ConfigJson));
+
+            Assert.Equal(HttpStatusCode.BadRequest, (await _client.PostAsJsonAsync($"/api/user-actions/{fourth.Id}/resolve", new { response = "x", recordAs = "somewhere" }, TestJson.Options)).StatusCode);
+        }
+        finally
+        {
+            await DeleteAgent(agent.Id);
+            foreach (var set in (await _client.GetFromJsonAsync<List<RuleSetResponse>>("/api/resources?type=RuleSet", TestJson.Options))!.Where(r => r.Name == "UA decisions agent decisions"))
+            {
+                await _client.DeleteAsync($"/api/resources/{set.Id}");
+            }
+        }
+    }
+
+    private static int ResourceConfigRules(string configJson) =>
+        JsonDocument.Parse(configJson).RootElement.GetProperty("rules").GetArrayLength();
+
+    [Fact]
+    public async Task An_answer_can_go_to_the_memory_graph_inbox_when_one_is_attached_and_nowhere_else_otherwise()
+    {
+        var graphDir = Path.Combine(Path.GetTempPath(), $"looper-ua-graph-{Guid.NewGuid():N}");
+        var graph = await _client.PostAsJsonAsync("/api/resources", new
+        {
+            name = "Team memory", type = "Custom", customTypeKey = "MemoryGraph", description = "",
+            configJson = System.Text.Json.JsonSerializer.Serialize(new { path = graphDir })
+        }, TestJson.Options);
+        Assert.Equal(HttpStatusCode.Created, graph.StatusCode);
+        var graphId = (await graph.Content.ReadFromJsonAsync<RuleSetResponse>(TestJson.Options))!.Id;
+        var withGraph = await CreateAgent("UA memory agent", graphId);
+        var without = await CreateAgent("UA plain agent");
+        try
+        {
+            var raised = await Raise(new { agentId = withGraph.Id, title = "Tone of voice?", details = "" });
+            Assert.True(raised.CanRecordToMemory);
+            var resolved = await (await _client.PostAsJsonAsync($"/api/user-actions/{raised.Id}/resolve",
+                new { response = "Friendly, never salesy.", recordAs = "memory" }, TestJson.Options)).Content.ReadFromJsonAsync<UserActionResponse>(TestJson.Options);
+            Assert.Contains("inbox of 'Team memory'", resolved!.ResolutionNote);
+            var inbox = Directory.GetFiles(Path.Combine(graphDir, "inbox"));
+            Assert.Contains(inbox, f => File.ReadAllText(f).Contains("Friendly, never salesy."));
+
+            var plain = await Raise(new { agentId = without.Id, title = "Tone of voice?", details = "" });
+            Assert.False(plain.CanRecordToMemory);
+            var refused = await _client.PostAsJsonAsync($"/api/user-actions/{plain.Id}/resolve", new { response = "x", recordAs = "memory" }, TestJson.Options);
+            Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+            Assert.Contains("no memory graph", await refused.Content.ReadAsStringAsync());
+        }
+        finally
+        {
+            await DeleteAgent(withGraph.Id);
+            await DeleteAgent(without.Id);
+            await _client.DeleteAsync($"/api/resources/{graphId}");
+            try { Directory.Delete(graphDir, recursive: true); } catch (IOException) { }
         }
     }
 

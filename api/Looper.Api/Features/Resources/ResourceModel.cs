@@ -13,7 +13,8 @@ public sealed record ResourceDto(
     string ConfigJson,
     int AgentCount,
     DateTime CreatedAtUtc,
-    DateTime UpdatedAtUtc);
+    DateTime UpdatedAtUtc,
+    Guid WorkflowId);
 
 public static class ResourceMapper
 {
@@ -26,7 +27,8 @@ public static class ResourceMapper
         SecretMasker.Mask(resource, registry),
         agentCount,
         resource.CreatedAtUtc,
-        resource.UpdatedAtUtc);
+        resource.UpdatedAtUtc,
+        resource.WorkflowId);
 }
 
 /// <summary>

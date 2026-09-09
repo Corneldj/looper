@@ -1,0 +1,38 @@
+<div class="modal-backdrop">
+  <div class="modal workflow-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>{{ workflow() ? 'Edit workflow' : 'New workflow' }}</h2>
+      <button class="icon-btn" title="Close" [disabled]="saving()" (click)="cancel()">✕</button>
+    </div>
+    <p class="editor-blurb">
+      A workflow is one workbench: its own resources, agents and metrics, wired for one purpose.
+      Events still cross workflows, so loops in different ones can chain.
+    </p>
+
+    <div class="editor-form">
+      <div class="field">
+        <label>Name</label>
+        <input class="input" [ngModel]="name()" (ngModelChange)="name.set($event)" placeholder="Marketing campaigns" (keydown.enter)="save()" />
+      </div>
+      <div class="field">
+        <label>Description <span class="optional">optional</span></label>
+        <input class="input" [ngModel]="description()" (ngModelChange)="description.set($event)" placeholder="What this workflow is for" />
+      </div>
+    </div>
+
+    @if (error(); as message) {
+      <p class="save-error">{{ message }}</p>
+    }
+
+    <div class="modal-footer">
+      @if (workflow(); as w) {
+        <button class="btn btn-danger" [disabled]="!canDelete()" [title]="w.isDefault ? 'The default workflow cannot be deleted' : 'Delete this workflow and everything in it'" (click)="remove()">Delete</button>
+        <span class="spacer"></span>
+      }
+      <button class="btn btn-ghost" [disabled]="saving()" (click)="cancel()">Cancel</button>
+      <button class="btn btn-primary" [disabled]="!canSave()" (click)="save()">
+        {{ saving() ? 'Saving…' : workflow() ? 'Save changes' : 'Create workflow' }}
+      </button>
+    </div>
+  </div>
+</div>

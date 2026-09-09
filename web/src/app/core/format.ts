@@ -62,6 +62,23 @@ export function formatPercent(fraction: number): string {
   return `${Math.round(fraction * 100)}%`;
 }
 
+/** A metric reading with its unit: 1,234 sign-ups · 3.4% · $12.50 · 250 ms. */
+export function formatMetric(value: number, unit = ''): string {
+  const u = unit.trim();
+  const abs = Math.abs(value);
+  const num = Number.isInteger(value)
+    ? value.toLocaleString('en-US')
+    : abs >= 100
+      ? Math.round(value).toLocaleString('en-US')
+      : abs >= 10
+        ? value.toFixed(1)
+        : value.toFixed(2).replace(/\.?0+$/, '');
+  if (!u) return num;
+  if (u === '%') return `${num}%`;
+  if (u === '$' || u === '€' || u === '£') return `${u}${num}`;
+  return `${num} ${u}`;
+}
+
 export function modelShortName(model: string): string {
   return model
     .replace('claude-', '')

@@ -47,6 +47,11 @@ public enum ResourceType
 public class Resource
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+
+    /// <summary>The workflow (workbench) this resource lives in.</summary>
+    public Guid WorkflowId { get; set; } = Workflow.DefaultId;
+    public Workflow? Workflow { get; set; }
+
     public string Name { get; set; } = "";
     public ResourceType Type { get; set; }
 

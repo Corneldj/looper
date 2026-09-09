@@ -10,7 +10,7 @@ namespace Looper.Api.Infrastructure.Execution;
 /// Claude edits the file in place — with permission to run the interpreter when the user allows
 /// it — and the file on disk afterwards is the authoritative result, not Claude's narrative.
 /// </summary>
-public sealed class ScriptAssistant(IOptions<LooperOptions> options, ILogger<ScriptAssistant> logger)
+public sealed class ScriptAssistant(IOptions<LooperOptions> options, ClaudeAuthProvider claudeAuth, ILogger<ScriptAssistant> logger)
 {
     public sealed record AssistResult(bool Success, string? Code, string? Summary, string? Error, decimal CostUsd);
 
@@ -50,6 +50,15 @@ public sealed class ScriptAssistant(IOptions<LooperOptions> options, ILogger<Scr
                 var interpreter = language == ScriptLanguage.Bash ? "bash" : options.Value.PythonCommand;
                 startInfo.ArgumentList.Add("--allowedTools");
                 startInfo.ArgumentList.Add($"Bash({interpreter}:*)");
+            }
+
+            try
+            {
+                await claudeAuth.ApplyAsync(startInfo, cancellationToken);
+            }
+            catch (ClaudeAuthException ex)
+            {
+                return new AssistResult(false, null, null, ex.Message, 0);
             }
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

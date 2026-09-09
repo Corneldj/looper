@@ -1,0 +1,100 @@
+<section class="metrics">
+  <header class="metrics-head">
+    <div>
+      <span class="section-label">Your metrics — the outcomes you care about</span>
+      <p class="head-sub">
+        Define what success looks like; agents, scripts and you report the numbers. Every metric you create appears here.
+      </p>
+    </div>
+    <button type="button" class="btn btn-primary btn-sm" [disabled]="!metricType()" (click)="editorOpen.set(true)">+ New metric</button>
+  </header>
+
+  @if (apiError()) {
+    <div class="stale-note">
+      Couldn’t reach the Looper API —
+      {{ loaded() ? 'showing the last loaded metrics.' : 'your metrics will fill in once it’s back.' }}
+    </div>
+  }
+
+  @if (!loaded()) {
+    @if (!apiError()) {
+      <div class="loading-hint">Loading…</div>
+    }
+  } @else if (metrics().length === 0) {
+    <div class="card empty-state metrics-empty">
+      <div class="glyph">📈</div>
+      <h3>No metrics yet</h3>
+      <p>
+        Pull requests are only one kind of result. Create a metric for whatever your loops are meant to move —
+        sign-ups, conversion, resolution time, revenue — and attach it to the agents that affect it.
+      </p>
+      <button type="button" class="btn btn-soft btn-sm" [disabled]="!metricType()" (click)="editorOpen.set(true)">Create your first metric</button>
+    </div>
+  } @else {
+    <div class="metric-grid">
+      @for (m of metrics(); track m.resourceId) {
+        <button type="button" class="card interactive metric-card" (click)="detailFor.set(m)" [title]="m.description || 'Open ' + m.name">
+          <div class="metric-top">
+            <span class="metric-name">{{ m.name }}</span>
+            <span class="chip chip-neutral agg" [title]="aggregationBlurb(m)">{{ aggregationLabel(m) }}</span>
+          </div>
+
+          <div class="metric-reading">
+            <span class="metric-value num" [class.dim]="m.current === null">
+              @if (unitIsPrefix(m)) { <span class="metric-unit">{{ m.unit }}</span> }{{ currentNumber(m) }}@if (!unitIsPrefix(m) && m.unit && m.current !== null) { <span class="metric-unit">{{ m.unit }}</span> }
+            </span>
+            @if (sparkPoints(m); as points) {
+              <svg class="spark" viewBox="0 0 120 32" preserveAspectRatio="none" aria-hidden="true">
+                <polyline [attr.points]="points" />
+              </svg>
+            }
+          </div>
+
+          <div class="metric-trend">
+            @if (trend(m); as t) {
+              <span class="trend num {{ t.tone }}">{{ t.arrow }} {{ t.text }}</span>
+              <span class="vs">vs prev {{ days() }}d</span>
+            } @else if (m.current === null) {
+              <span class="vs">no readings yet</span>
+            } @else {
+              <span class="vs">no baseline yet</span>
+            }
+          </div>
+
+          @if (m.target !== null) {
+            <div class="target" [title]="'Target ' + formatMetric(m.target, m.unit)">
+              <div class="target-bar">
+                <div class="target-fill {{ progressTone(m) }}" [style.width.%]="(progress(m) ?? 0) * 100"></div>
+              </div>
+              <span class="target-text num">
+                @if (progressPct(m); as pct) {
+                  {{ pct }}% of {{ formatMetric(m.target, m.unit) }}
+                } @else {
+                  target {{ formatMetric(m.target, m.unit) }}
+                }
+              </span>
+            </div>
+          }
+
+          <div class="metric-foot">
+            <span class="foot-text">{{ reporters(m) }}</span>
+            <span class="foot-text num">
+              {{ m.countInWindow }} value{{ m.countInWindow === 1 ? '' : 's' }}
+              @if (m.latestAtUtc) {
+                · last {{ relativeTime(m.latestAtUtc) }}
+              }
+            </span>
+          </div>
+        </button>
+      }
+    </div>
+  }
+</section>
+
+@if (editorOpen() && metricType(); as type) {
+  <app-resource-editor type="Custom" [typeDef]="type" [resource]="null" [workflowId]="workflowId() ?? workflowsStore.selectedId()" (closed)="onEditorClosed($event)" />
+}
+
+@if (detailFor(); as metric) {
+  <app-metric-detail-modal [metric]="metric" (changed)="refresh()" (closed)="detailFor.set(null)" />
+}

@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Looper.Api.Features.Dashboard;
 
-public sealed record GetModelUsageQuery(int Days) : IQuery<IReadOnlyList<ModelUsageDto>>;
+public sealed record GetModelUsageQuery(int Days, Guid? WorkflowId = null) : IQuery<IReadOnlyList<ModelUsageDto>>;
 
 public sealed class GetModelUsageHandler(LooperDbContext db)
     : IQueryHandler<GetModelUsageQuery, IReadOnlyList<ModelUsageDto>>
@@ -15,8 +15,10 @@ public sealed class GetModelUsageHandler(LooperDbContext db)
         var (_, fromUtc, toUtc) = DashboardWindow.Resolve(query.Days);
 
         // SQLite cannot aggregate decimals server-side, so fetch a projection and group in memory.
+        var workflowId = query.WorkflowId;
         var runs = await db.Runs
             .Where(r => r.StartedAtUtc >= fromUtc && r.StartedAtUtc < toUtc)
+            .Where(r => workflowId == null || r.Agent!.WorkflowId == workflowId)
             .Select(r => new { r.Model, r.CostUsd, r.InputTokens, r.OutputTokens })
             .ToListAsync(cancellationToken);
 
@@ -36,6 +38,6 @@ public sealed class GetModelUsageHandler(LooperDbContext db)
 public sealed class GetModelUsageEndpoint : IEndpoint
 {
     public void Map(IEndpointRouteBuilder app) =>
-        app.MapGet("/api/dashboard/model-usage", (int? days, IDispatcher dispatcher, CancellationToken ct) =>
-            dispatcher.Query(new GetModelUsageQuery(days ?? 14), ct));
+        app.MapGet("/api/dashboard/model-usage", (int? days, Guid? workflowId, IDispatcher dispatcher, CancellationToken ct) =>
+            dispatcher.Query(new GetModelUsageQuery(days ?? 14, workflowId), ct));
 }

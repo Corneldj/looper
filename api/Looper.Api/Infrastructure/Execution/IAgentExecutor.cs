@@ -8,8 +8,6 @@ public sealed record AgentExecutionContext(
     Guid RunId,
     /// <summary>Set on review fix rounds: the reviewer's instructions appended to the loop prompt.</summary>
     string? FixInstructions = null,
-    /// <summary>The user's answers to resolved action requests, delivered once on the next run.</summary>
-    string? UserResponses = null,
     /// <summary>For event-triggered runs: the triggering events (topic + payload), verbatim.</summary>
     string? TriggerEvents = null,
     /// <summary>Output of before-run Script resources, already formatted as a prompt section.</summary>

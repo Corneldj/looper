@@ -1,0 +1,19 @@
+<div class="switcher" [class.pending]="!store.loaded()">
+  <span class="switcher-label">Workflow</span>
+  <select
+    class="select workflow-select"
+    [ngModel]="store.selectedId() ?? ''"
+    (ngModelChange)="pick($event)"
+    [disabled]="store.workflows().length === 0"
+    title="Which workbench you are looking at"
+  >
+    @for (w of store.workflows(); track w.id) {
+      <option [value]="w.id">{{ w.name }}</option>
+    }
+    @if (store.workflows().length === 0) {
+      <option value="">{{ store.loaded() ? 'No workflows' : 'Loading…' }}</option>
+    }
+  </select>
+  <button type="button" class="icon-btn" title="Rename or delete this workflow" aria-label="Rename or delete this workflow" [disabled]="!store.selected()" (click)="edit()"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M13.5 6.5l3 3"/></svg></button>
+  <button type="button" class="icon-btn" title="New workflow" aria-label="New workflow" (click)="create()"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+</div>

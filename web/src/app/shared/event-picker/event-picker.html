@@ -1,0 +1,55 @@
+<div class="picker">
+  @if (selected().length > 0) {
+    <div class="selected">
+      @for (topic of selected(); track topic) {
+        <span class="chip chip-accent picked mono">
+          {{ topic }}
+          <button type="button" class="unpick" [attr.aria-label]="'Remove ' + topic" (click)="remove(topic)">✕</button>
+        </span>
+      }
+    </div>
+  } @else {
+    <p class="none">{{ multiple() ? 'Nothing selected yet — pick events below or add one.' : 'No event chosen yet — pick one below or create it.' }}</p>
+  }
+
+  @if (!loaded()) {
+    <p class="catalog-note">Loading known events…</p>
+  } @else if (groups().length === 0) {
+    <p class="catalog-note">No events exist yet — create the first one below.</p>
+  } @else {
+    <div class="catalog">
+      @for (group of groups(); track group.kind) {
+        <div class="group">
+          <span class="group-label">{{ group.label }}</span>
+          <div class="options">
+            @for (t of group.items; track t.topic) {
+              <button
+                type="button"
+                class="option mono"
+                [class.on]="isSelected(t.topic)"
+                [title]="t.source"
+                (click)="toggle(t.topic)"
+              >{{ t.topic }}</button>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <div class="custom">
+    <input
+      class="input mono"
+      [placeholder]="allowPatterns() ? placeholder() + '  or  prefix.*' : placeholder()"
+      [ngModel]="custom()"
+      (ngModelChange)="custom.set($event)"
+      (keydown.enter)="$event.preventDefault(); addCustom()"
+    />
+    <button type="button" class="btn btn-soft btn-sm" [disabled]="!customValid()" (click)="addCustom()">
+      {{ customIsNew() ? 'Create' : 'Add' }}
+    </button>
+  </div>
+  @if (custom().trim() && !customValid()) {
+    <span class="hint invalid">Dotted lowercase keys only — letters, digits and dashes{{ allowPatterns() ? ', optionally ending in .*' : '' }}.</span>
+  }
+</div>

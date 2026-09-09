@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Looper.Api.Features.Dashboard;
 
-public sealed record GetDashboardSummaryQuery(int Days) : IQuery<DashboardSummaryDto>;
+public sealed record GetDashboardSummaryQuery(int Days, Guid? WorkflowId = null) : IQuery<DashboardSummaryDto>;
 
 public sealed class GetDashboardSummaryHandler(LooperDbContext db)
     : IQueryHandler<GetDashboardSummaryQuery, DashboardSummaryDto>
@@ -17,18 +17,21 @@ public sealed class GetDashboardSummaryHandler(LooperDbContext db)
         var previousFromUtc = fromUtc.AddDays(-days);
 
         // SQLite cannot aggregate decimals server-side, so fetch a projection and aggregate in memory.
+        var workflowId = query.WorkflowId;
         var runs = await db.Runs
             .Where(r => r.StartedAtUtc >= fromUtc && r.StartedAtUtc < toUtc)
+            .Where(r => workflowId == null || r.Agent!.WorkflowId == workflowId)
             .Select(r => new { r.Status, r.CostUsd, r.DurationMs, r.InputTokens, r.OutputTokens })
             .ToListAsync(cancellationToken);
 
         var previousCosts = await db.Runs
             .Where(r => r.StartedAtUtc >= previousFromUtc && r.StartedAtUtc < fromUtc)
+            .Where(r => workflowId == null || r.Agent!.WorkflowId == workflowId)
             .Select(r => r.CostUsd)
             .ToListAsync(cancellationToken);
 
-        var activeAgents = await db.Agents.CountAsync(a => a.Enabled, cancellationToken);
-        var totalAgents = await db.Agents.CountAsync(cancellationToken);
+        var activeAgents = await db.Agents.CountAsync(a => a.Enabled && (workflowId == null || a.WorkflowId == workflowId), cancellationToken);
+        var totalAgents = await db.Agents.CountAsync(a => workflowId == null || a.WorkflowId == workflowId, cancellationToken);
 
         var completed = runs.Where(r => r.Status != RunStatus.Running).ToList();
         var totalCost = runs.Sum(r => r.CostUsd);
@@ -53,6 +56,6 @@ public sealed class GetDashboardSummaryHandler(LooperDbContext db)
 public sealed class GetDashboardSummaryEndpoint : IEndpoint
 {
     public void Map(IEndpointRouteBuilder app) =>
-        app.MapGet("/api/dashboard/summary", (int? days, IDispatcher dispatcher, CancellationToken ct) =>
-            dispatcher.Query(new GetDashboardSummaryQuery(days ?? 14), ct));
+        app.MapGet("/api/dashboard/summary", (int? days, Guid? workflowId, IDispatcher dispatcher, CancellationToken ct) =>
+            dispatcher.Query(new GetDashboardSummaryQuery(days ?? 14, workflowId), ct));
 }

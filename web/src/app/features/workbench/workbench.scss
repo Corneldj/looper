@@ -1,24 +1,495 @@
-.workbench {
-  display: grid;
-  grid-template-columns: 390px 1fr;
-  gap: 32px;
-  align-items: start;
+:host {
+  display: block;
 }
 
-.resources-column {
-  position: sticky;
-  top: 86px;
-  max-height: calc(100vh - 110px);
-  overflow-y: auto;
-  padding-right: 4px;
-  /* Sticky creates a stacking context that would trap this panel's modals below
-     later-DOM positioned elements (e.g. agent-card toggles). Sitting above the
-     topbar (40) lets the modals inside dim the whole page; the column itself
-     never geometrically overlaps the topbar. */
-  z-index: 41;
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-@media (max-width: 1080px) {
-  .workbench { grid-template-columns: 1fr; }
-  .resources-column { position: static; max-height: none; }
+.workflow-chip {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
+.legend {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-right: 10px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.port-glyph {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  vertical-align: -1px;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+
+  &.running {
+    background: var(--green);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  &.scheduled { background: var(--accent); }
+  &.paused { background: var(--border-strong); }
+}
+
+.loading-note {
+  color: var(--text-3);
+  font-size: 13px;
+  padding: 12px 2px;
+}
+
+.panel-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--red);
+  background: var(--red-soft);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px 6px 12px;
+  margin-bottom: 16px;
+}
+
+.empty-state.card {
+  padding: 64px 24px;
+}
+
+.empty-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.first-action { margin-top: 16px; }
+
+.btn-xs {
+  padding: 4px 9px;
+  font-size: 12px;
+  border-radius: 7px;
+}
+
+.chip.mini {
+  font-size: 10.5px;
+  padding: 1px 7px;
+  flex: none;
+}
+
+/* ---------- canvas ---------- */
+
+.map-canvas {
+  position: relative;
+  padding-top: 8px;
+  user-select: none;
+
+  &.dragging {
+    cursor: grabbing;
+    * { cursor: grabbing; }
+  }
+}
+
+.edges {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  pointer-events: none;
+
+  marker path { fill: var(--accent-2); }
+}
+
+.event-glyph {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  border-top: 2px dotted var(--accent-2);
+}
+
+/* Edges: one neutral hue; state is the only color change. */
+.edge {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+  transition: stroke 0.15s ease, opacity 0.15s ease;
+
+  &.running {
+    stroke: var(--green);
+    stroke-dasharray: 6 5;
+    animation: flow 0.9s linear infinite;
+  }
+  &.focus {
+    stroke: var(--accent);
+    stroke-width: 2;
+  }
+  &.cut { stroke: var(--red); }
+  &.faded { opacity: 0.18; }
+
+  /* Agent→agent event chains: a second hue, dotted, with an arrowhead. */
+  &.event {
+    stroke: var(--accent-2);
+    stroke-dasharray: 3 4;
+    stroke-width: 1.6;
+
+    &.focus { stroke-width: 2.2; opacity: 1; }
+  }
+
+  /* The connection being drafted from a port. */
+  &.draft {
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-dasharray: 5 5;
+    opacity: 0.7;
+    transition: none;
+
+    &.allowed { opacity: 1; stroke-dasharray: none; }
+    &.blocked { stroke: var(--border-strong); }
+  }
+}
+
+/* Wide invisible twin of each resource edge so a thin line is easy to hover. */
+.edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+@keyframes flow {
+  to { stroke-dashoffset: -11; }
+}
+
+/* ---------- nodes ---------- */
+
+.nodes {
+  position: relative;
+}
+
+.col-label {
+  position: absolute;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The "+" next to a column title: a real button-sized target (fits inside the TOP_PAD band above the first node). */
+.col-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  margin: -6px 0;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+
+  .icon { display: block; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+
+  &:hover { background: var(--accent-soft); color: var(--accent-strong); border-color: transparent; }
+}
+
+.group-label {
+  position: absolute;
+  left: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  padding: 8px 14px;
+  transition: opacity 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+
+  &.focus {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-md);
+  }
+  &.faded { opacity: 0.3; }
+}
+
+/* ---- resource ---- */
+
+.node.resource {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding-right: 22px;
+  cursor: default;
+
+  .res-icon { font-size: 16px; flex: none; }
+  .res-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &.unused {
+    border-style: dashed;
+    opacity: 0.7;
+  }
+  &.unused.faded { opacity: 0.2; }
+  &.wiring { border-color: var(--accent); opacity: 1; }
+
+  .res-actions {
+    position: absolute;
+    right: 22px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 0;
+    padding-left: 12px;
+    background: linear-gradient(90deg, transparent, var(--surface) 14px);
+    opacity: 0;
+    transition: opacity 0.12s ease;
+
+    .icon-btn { width: 26px; height: 26px; font-size: 13px; }
+  }
+  &:hover .res-actions,
+  &:focus-within .res-actions { opacity: 1; }
+}
+
+/* The extension point: drag it onto an agent. */
+.port {
+  position: absolute;
+  right: -8px;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  margin-top: -8px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: var(--surface);
+  cursor: grab;
+  touch-action: none;
+  box-shadow: 0 0 0 3px var(--surface);
+  transition: transform 0.12s ease, background 0.12s ease;
+
+  &:hover, .wiring & {
+    background: var(--accent);
+    transform: scale(1.25);
+  }
+  &:active { cursor: grabbing; }
+}
+
+/* ---- agent ---- */
+
+.node.agent {
+  gap: 5px;
+  justify-content: space-between;
+  padding: 10px 14px;
+
+  &.droppable {
+    border-style: dashed;
+    border-color: var(--accent);
+  }
+  &.drop-target {
+    border-style: solid;
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    box-shadow: var(--shadow-md);
+  }
+  &.drop-blocked {
+    border-style: solid;
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+  }
+
+  .agent-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .agent-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &:hover { color: var(--accent-strong); }
+  }
+  .agent-chips {
+    display: flex;
+    gap: 4px;
+    flex: none;
+  }
+  .agent-meta {
+    font-size: 11.5px;
+    color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .agent-stats {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    font-size: 11.5px;
+    color: var(--text);
+  }
+  .stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .stat-label {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .agent-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .switch { transform: scale(0.85); transform-origin: left center; }
+    .spacer { flex: 1; }
+    .icon-btn { width: 26px; height: 26px; font-size: 13px; }
+    .icon-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  }
+}
+
+/* ---- delivery ---- */
+
+.node.delivery {
+  background: var(--surface-2);
+
+  .deliv-line {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+  }
+  .deliv-label {
+    flex: 1;
+    min-width: 0;
+    font-size: 11.5px;
+    color: var(--text-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .deliv-main {
+    flex: none;
+    font-size: 12.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .deliv-sub {
+    font-size: 11px;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .quiet-text {
+    color: var(--text-3);
+    font-weight: 500;
+  }
+  &.quiet { border-style: dashed; }
+}
+
+/* ---- edge cut + drag hint ---- */
+
+.edge-cut {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--red);
+  background: var(--surface);
+  color: var(--red);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  z-index: 2;
+
+  &:hover { background: var(--red); color: #fff; }
+}
+
+.drag-hint {
+  position: absolute;
+  z-index: 3;
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: var(--text);
+  color: var(--surface);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@media (max-width: 900px) {
+  .legend { display: none; }
 }

@@ -48,7 +48,16 @@ public sealed class RaiseUserActionHandler(LooperDbContext db)
             agentId = command.AgentId!.Value;
         }
 
-        var agent = await db.Agents.AsNoTracking().FirstOrDefaultAsync(a => a.Id == agentId, cancellationToken)
+        var agent = await db.Agents.AsNoTracking()
+                .Where(a => a.Id == agentId)
+                .Select(a => new
+                {
+                    a.Name,
+                    CanRecordToMemory = a.Resources.Any(res =>
+                        res.Type == ResourceType.Custom && res.CustomTypeKey != null
+                        && Modules.BuiltIn.GraphInfrastructure.MemoryTypeKeys.Contains(res.CustomTypeKey))
+                })
+                .FirstOrDefaultAsync(cancellationToken)
             ?? throw new ValidationException($"Unknown agent '{agentId}'.");
 
         // Blocking behaviour comes from the agent's User Action resource at raise time.
@@ -87,7 +96,7 @@ public sealed class RaiseUserActionHandler(LooperDbContext db)
 
         if (run is not null) run.ActionRequested = true;
         await db.SaveChangesAsync(cancellationToken);
-        return request.ToDto(agent.Name);
+        return request.ToDto(agent.Name, agent.CanRecordToMemory);
     }
 }
 

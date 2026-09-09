@@ -36,4 +36,7 @@ public class LooperOptions
 
     /// <summary>How often graph health is measured and needs-curation events are raised.</summary>
     public int GraphMaintenanceMinutes { get; set; } = 30;
+
+    /// <summary>How many times Claude may rewrite a generated resource-type module that failed to compile before giving up.</summary>
+    public int ModuleGenerationMaxAttempts { get; set; } = 4;
 }

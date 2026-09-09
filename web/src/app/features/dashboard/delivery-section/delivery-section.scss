@@ -23,6 +23,20 @@
   max-width: 70ch;
 }
 
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.is-folded .delivery-head {
+  margin-bottom: 0;
+  padding: 14px 18px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}
+
 .stale-note {
   margin: 0 0 16px;
   padding: 9px 14px;

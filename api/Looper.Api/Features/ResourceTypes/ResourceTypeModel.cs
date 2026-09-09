@@ -29,17 +29,17 @@ public static class ResourceTypeCatalog
     public static readonly IReadOnlyList<ResourceTypeDto> BuiltIns =
     [
         new(nameof(ResourceType.McpServer), "MCP Server", "⚡", "Tools exposed to the agent over the Model Context Protocol.", true, null),
-        new(nameof(ResourceType.FileLocation), "Folder / Files", "📁", "A directory the agent can read and edit. The primary one becomes its working directory.", true, null),
+        new(nameof(ResourceType.FileLocation), "Folder / Files", "📁", "A folder the agent can read and edit — documents, data, a codebase. The primary one becomes its working directory.", true, null),
         new(nameof(ResourceType.Rag), "Knowledge (RAG)", "📚", "A knowledge source the agent is told to consult.", true, null),
-        new(nameof(ResourceType.TestingAction), "Testing Action", "🧪", "A command that runs after every loop and gates the result.", true, null),
+        new(nameof(ResourceType.TestingAction), "Check", "🧪", "A command that runs after every iteration and must exit 0 for the work to count — a test suite, a validator, a link checker, anything scriptable.", true, null),
         new(nameof(ResourceType.Rule), "Rule", "📏", "Standing instructions appended to the agent's system prompt.", true, null),
         new(nameof(ResourceType.RuleSet), "Rule Set", "📋", "A managed collection of rules — add, toggle and remove without the clutter.", true, null),
         new(nameof(ResourceType.WorkspacePool), "Dynamic Workspaces", "🗂️", "Agents claim a dedicated workspace per unit of work — provisioned on demand, context passed in, cleaned up on retention.", true, null),
-        new(nameof(ResourceType.UserAction), "User Action Requests", "🙋", "The agent can ask you to do or decide something — the loop parks until you respond, without failing.", true, null),
+        new(nameof(ResourceType.UserAction), "Ask the user", "🙋", "A tool, not a question: lets the agent raise a User Action Request whenever it needs something only you can do or decide. Attach one; the agent decides what to ask.", true, null),
         new(nameof(ResourceType.SubAgent), "Sub-agent", "🤖", "A helper agent the main agent can delegate to.", true, null),
         new(nameof(ResourceType.Reviewer), "Reviewer", "🧐", "An independent agent that reviews the work after every loop — pass, or fail with fix instructions.", true, null),
         new(nameof(ResourceType.AzureConnection), "Azure Connection", "☁️", "Azure identity exposed as environment variables.", true, null),
-        new(nameof(ResourceType.PatToken), "PAT Token", "🔑", "A personal access token injected as an environment variable.", true, null)
+        new(nameof(ResourceType.PatToken), "API key / secret", "🔑", "A secret injected as an environment variable — an API key, a token, a password.", true, null)
     ];
 
     public static ResourceTypeDto ToDto(this IResourceTypeModule module, bool builtIn = false) => new(

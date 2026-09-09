@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Looper.Api.Infrastructure;
+using Looper.Api.Infrastructure.Execution;
 using Microsoft.Extensions.Options;
 
 namespace Looper.Api.Modules;
@@ -12,11 +13,10 @@ namespace Looper.Api.Modules;
 /// </summary>
 public sealed partial class ClaudeModuleSourceGenerator(
     IOptions<LooperOptions> options,
-    ILogger<ClaudeModuleSourceGenerator> logger)
+    ClaudeAuthProvider claudeAuth,
+    ILogger<ClaudeModuleSourceGenerator> logger) : IModuleSourceGenerator
 {
-    public sealed record GenerationResult(bool Success, string? Source, string? Error, decimal CostUsd);
-
-    public async Task<GenerationResult> GenerateAsync(string description, IReadOnlyList<string>? previousErrors,
+    public async Task<ModuleGenerationResult> GenerateAsync(string description, IReadOnlyList<string>? previousErrors,
         string? previousSource, CancellationToken cancellationToken)
     {
         var startInfo = new ProcessStartInfo
@@ -40,6 +40,15 @@ public sealed partial class ClaudeModuleSourceGenerator(
         startInfo.ArgumentList.Add("--append-system-prompt");
         startInfo.ArgumentList.Add("You write a single self-contained C# file. Respond with ONLY one ```csharp code block and nothing else.");
 
+        try
+        {
+            await claudeAuth.ApplyAsync(startInfo, cancellationToken);
+        }
+        catch (ClaudeAuthException ex)
+        {
+            return new ModuleGenerationResult(false, null, ex.Message, 0);
+        }
+
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(TimeSpan.FromMinutes(6));
 
@@ -50,7 +59,7 @@ public sealed partial class ClaudeModuleSourceGenerator(
         }
         catch (Exception ex)
         {
-            return new GenerationResult(false, null,
+            return new ModuleGenerationResult(false, null,
                 $"Could not start '{options.Value.ClaudeCommand}'. Install Claude Code (code.claude.com) or set Looper:ClaudeCommand. ({ex.Message})", 0);
         }
 
@@ -65,7 +74,7 @@ public sealed partial class ClaudeModuleSourceGenerator(
         catch (OperationCanceledException)
         {
             try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { /* gone */ }
-            return new GenerationResult(false, null, "Claude took too long to generate the module (6 minute limit).", 0);
+            return new ModuleGenerationResult(false, null, "Claude took too long to generate the module (6 minute limit).", 0);
         }
 
         var stdout = await stdoutTask;
@@ -73,7 +82,7 @@ public sealed partial class ClaudeModuleSourceGenerator(
         if (document is null)
         {
             logger.LogWarning("Module generation produced no JSON result (exit {Code})", process.ExitCode);
-            return new GenerationResult(false, null, $"Claude CLI returned no result (exit code {process.ExitCode}).", 0);
+            return new ModuleGenerationResult(false, null, $"Claude CLI returned no result (exit code {process.ExitCode}).", 0);
         }
 
         var root = document.RootElement;
@@ -83,13 +92,13 @@ public sealed partial class ClaudeModuleSourceGenerator(
 
         if (isError || string.IsNullOrWhiteSpace(text))
         {
-            return new GenerationResult(false, null, string.IsNullOrWhiteSpace(text) ? "Claude returned an empty response." : text, cost);
+            return new ModuleGenerationResult(false, null, string.IsNullOrWhiteSpace(text) ? "Claude returned an empty response." : text, cost);
         }
 
         var source = ExtractCode(text);
         return string.IsNullOrWhiteSpace(source)
-            ? new GenerationResult(false, null, "Claude's response contained no C# code block.", cost)
-            : new GenerationResult(true, source, null, cost);
+            ? new ModuleGenerationResult(false, null, "Claude's response contained no C# code block.", cost)
+            : new ModuleGenerationResult(true, source, null, cost);
     }
 
     private static string BuildPrompt(string description, IReadOnlyList<string>? previousErrors, string? previousSource)

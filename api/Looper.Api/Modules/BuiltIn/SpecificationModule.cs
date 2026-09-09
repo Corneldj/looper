@@ -6,7 +6,7 @@ namespace Looper.Api.Modules.BuiltIn;
 /// <summary>
 /// The contract of record for an agent's work: a specification carrying stable REQ-n
 /// (requirement) and AC-n (acceptance criterion) identifiers. Attaching one closes the
-/// traceability gap in the PRD-to-PR pipeline — every PR the agent registers must cite
+/// traceability gap between requirements and delivered work — every deliverable the agent registers must cite
 /// the acceptance criteria it satisfies, and Looper verifies the citations against the
 /// spec at registration time (a harness gate, not an honor system).
 /// </summary>
@@ -17,7 +17,7 @@ public sealed class SpecificationModule : IResourceTypeModule
     public string TypeKey => TypeKey_;
     public string DisplayName => "Specification";
     public string Icon => "📐";
-    public string Blurb => "REQ/AC identifiers every PR must cite — verified traceability from spec to shipped work.";
+    public string Blurb => "Requirements (REQ-n) and acceptance criteria (AC-n) every registered deliverable must cite — verified traceability from spec to finished work.";
 
     public IReadOnlyList<ResourceField> Fields { get; } =
     [
@@ -64,10 +64,10 @@ public sealed class SpecificationModule : IResourceTypeModule
             $"SPECIFICATION {config.SpecId} — the contract your work is measured against. {identifierNote}" +
             (config.Path is not null ? $" Full spec on disk at {config.Path} (also $LOOPER_SPEC_PATH) — read it before building." : "") +
             (body is not null ? $"\n---\n{body}\n---" : "") +
-            "\nTRACEABILITY" + (config.Advisory ? " (advisory)" : " (enforced)") + ": every PR you register must cite " +
-            "the acceptance criteria it satisfies — register with the satisfies field: " +
+            "\nTRACEABILITY" + (config.Advisory ? " (advisory)" : " (enforced)") + ": every deliverable you register — a pull request, " +
+            "or any finished piece of work with a link — must cite the acceptance criteria it satisfies; register with the satisfies field: " +
             "curl -s -X POST \"$LOOPER_API_URL/api/delivery/prs\" -H 'Content-Type: application/json' " +
-            "-d \"{\\\"runId\\\":\\\"$LOOPER_RUN_ID\\\",\\\"url\\\":\\\"<pr url>\\\",\\\"title\\\":\\\"<pr title>\\\"," +
+            "-d \"{\\\"runId\\\":\\\"$LOOPER_RUN_ID\\\",\\\"url\\\":\\\"<link to the deliverable>\\\",\\\"title\\\":\\\"<what it is>\\\"," +
             "\\\"repoPath\\\":\\\"$PWD\\\",\\\"satisfies\\\":\\\"AC-1,AC-3\\\"}\". " +
             (config.Advisory
                 ? "Citations are checked against the spec when present. "
@@ -75,7 +75,7 @@ public sealed class SpecificationModule : IResourceTypeModule
             "Cite only criteria your change actually delivers — reviewers and humans audit against them. " +
             "If the work you're doing matches no acceptance criterion, that is a spec gap: raise it to the user " +
             "(user action request or escalation) instead of inventing a citation. Also reference the AC ids in the " +
-            "PR description itself so human reviewers see the same traceability.");
+            "deliverable's own description so human reviewers see the same traceability.");
 
         return contribution;
     }
@@ -85,8 +85,8 @@ public sealed class SpecificationModule : IResourceTypeModule
 public sealed record SpecificationConfig(string SpecId, string Content, string? Path, bool Advisory);
 
 /// <summary>
-/// Deterministic spec/PR traceability: identifier extraction and citation verification.
-/// Used by the module (protocol text) and by the PR-registration gate (enforcement).
+/// Deterministic spec-to-deliverable traceability: identifier extraction and citation verification.
+/// Used by the module (protocol text) and by the delivery-registration gate (enforcement).
 /// </summary>
 public static partial class SpecificationTraceability
 {

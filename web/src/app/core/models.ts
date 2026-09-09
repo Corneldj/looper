@@ -26,8 +26,50 @@ export type TriggerMode = 'Scheduled' | 'Event';
 /** Sentinel the API returns in place of stored secrets; sending it back preserves the stored value. */
 export const SECRET_SENTINEL = '__SECRET_UNCHANGED__';
 
+// ---------- Settings: how the Claude Code CLI authenticates ----------
+
+/** Subscription = the Claude Code login on the API machine (default); ApiKey = a stored Anthropic API key. */
+export type ClaudeAuthMode = 'Subscription' | 'ApiKey';
+
+export interface SettingsDto {
+  claudeAuthMode: ClaudeAuthMode;
+  /** Whether a key is stored. The key itself never leaves the server. */
+  hasApiKey: boolean;
+  /** The last characters of the stored key, e.g. "…a1b2". */
+  apiKeyHint: string | null;
+  updatedAtUtc: string | null;
+}
+
+export interface UpdateSettingsRequest {
+  claudeAuthMode: ClaudeAuthMode;
+  /** A new key replaces the stored one; omit (or send the secret sentinel) to keep it. */
+  apiKey?: string | null;
+  /** Removes the stored key. Refused while the mode still needs one. */
+  clearApiKey?: boolean;
+}
+
+// ---------- Workflows: one workbench each ----------
+
+export interface WorkflowDto {
+  id: string;
+  name: string;
+  description: string;
+  isDefault: boolean;
+  agentCount: number;
+  resourceCount: number;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+}
+
+export interface SaveWorkflowRequest {
+  name: string;
+  description: string;
+}
+
 export interface ResourceDto {
   id: string;
+  /** The workflow (workbench) this resource lives in. */
+  workflowId: string;
   name: string;
   type: ResourceType;
   /** For type 'Custom': the TypeKey of the dynamic resource type that owns this resource. */
@@ -69,17 +111,33 @@ export interface GeneratedResourceTypeDto {
   costUsd: number;
 }
 
+export type GenerationPhase = 'Generating' | 'Compiling' | 'Repairing' | 'Installing' | 'Installed' | 'Failed' | 'Cancelled';
+
+/** A resource-type generation in flight: Claude writes, Roslyn compiles, errors go back to Claude — up to a cap, until cancelled. */
+export interface GenerationJobDto {
+  id: string;
+  description: string;
+  phase: GenerationPhase;
+  attempt: number;
+  maxAttempts: number;
+  lastErrors: string[];
+  costUsd: number;
+  result: GeneratedResourceTypeDto | null;
+  error: string | null;
+  startedAtUtc: string;
+  updatedAtUtc: string;
+}
+
 // ---------- Scripts (runnable Python/Bash resources) ----------
 
 export type ScriptLanguage = 'python' | 'bash';
 
-/** agent = the agent runs it on demand · before = harness runs it pre-iteration (stdout → prompt) · after = post-iteration gate. */
-export type ScriptTrigger = 'agent' | 'before' | 'after';
+/** before = Looper runs it pre-iteration (stdout → prompt) · after = post-iteration gate. Always by the harness, never by the model. */
+export type ScriptTrigger = 'before' | 'after';
 
 export const SCRIPT_TRIGGERS: { id: ScriptTrigger; label: string; blurb: string }[] = [
-  { id: 'agent', label: 'When the agent decides', blurb: 'The agent gets the path and runs it on demand.' },
-  { id: 'before', label: 'Before every iteration', blurb: 'Looper runs it first and hands the output to the agent as context.' },
-  { id: 'after', label: 'After every iteration (gate)', blurb: 'Looper runs it after the loop; a non-zero exit fails the run.' },
+  { id: 'before', label: 'Before every iteration', blurb: 'Looper runs it first and hands the output to the model as context.' },
+  { id: 'after', label: 'After every iteration (gate)', blurb: 'Looper runs it after the model; a non-zero exit fails the run.' },
 ];
 
 export interface ScriptRunRequest {
@@ -113,6 +171,67 @@ export interface ScriptAssistResultDto {
   summary: string;
   costUsd: number;
 }
+
+// ---------- Metrics: user-defined outcomes ----------
+
+export type MetricAggregation = 'Latest' | 'Sum' | 'Average';
+export type MetricDirection = 'Higher' | 'Lower';
+export type MetricSource = 'Agent' | 'Script' | 'Manual' | 'Api';
+
+export interface MetricPointDto {
+  /** yyyy-MM-dd (UTC) */
+  date: string;
+  value: number;
+}
+
+/** A Metric resource as the dashboard shows it: definition, current reading, trend, sparkline, reporters. */
+export interface MetricSummaryDto {
+  resourceId: string;
+  name: string;
+  description: string;
+  unit: string;
+  aggregation: MetricAggregation;
+  direction: MetricDirection;
+  target: number | null;
+  latest: number | null;
+  latestAtUtc: string | null;
+  /** The window's reading per the aggregation; null with no data. */
+  current: number | null;
+  previous: number | null;
+  trendPct: number | null;
+  countInWindow: number;
+  totalCount: number;
+  series: MetricPointDto[];
+  agents: string[];
+}
+
+export interface MetricValueDto {
+  id: string;
+  resourceId: string;
+  agentId: string | null;
+  agentName: string | null;
+  runId: string | null;
+  value: number;
+  note: string | null;
+  source: MetricSource;
+  recordedAtUtc: string;
+}
+
+export interface RecordMetricBody {
+  /** Metric id, name or slug. */
+  metric: string;
+  value: number;
+  note?: string | null;
+  runId?: string | null;
+  agentId?: string | null;
+  source?: MetricSource | null;
+}
+
+export const METRIC_AGGREGATIONS: { id: MetricAggregation; label: string; blurb: string }[] = [
+  { id: 'Latest', label: 'gauge', blurb: 'the newest reading is the current value' },
+  { id: 'Sum', label: 'total', blurb: 'reports add up over the period' },
+  { id: 'Average', label: 'average', blurb: 'the mean of the reports in the period' },
+];
 
 // ---------- Claude CLI status ----------
 
@@ -153,6 +272,8 @@ export interface DirectoryListingDto {
 
 export interface AgentSummaryDto {
   id: string;
+  /** The workflow (workbench) this agent lives in. */
+  workflowId: string;
   name: string;
   description: string;
   model: string;
@@ -203,6 +324,8 @@ export interface SaveAgentRequest {
   dryRun: boolean;
   autonomyLevel: number;
   resourceIds: string[];
+  /** Workflow for a new agent; ignored on update — agents don't move. */
+  workflowId?: string | null;
 }
 
 export interface RunSummaryDto {
@@ -347,17 +470,17 @@ export interface RecentFailureDto {
 
 export const RESOURCE_TYPES: { type: ResourceType; label: string; icon: string; blurb: string }[] = [
   { type: 'McpServer', label: 'MCP Server', icon: '⚡', blurb: 'Tools exposed to the agent over the Model Context Protocol.' },
-  { type: 'FileLocation', label: 'Folder / Files', icon: '📁', blurb: 'A directory the agent can read and edit. The primary one becomes its working directory.' },
+  { type: 'FileLocation', label: 'Folder / Files', icon: '📁', blurb: 'A folder the agent can read and edit — documents, data, a codebase. The primary one becomes its working directory.' },
   { type: 'Rag', label: 'Knowledge (RAG)', icon: '📚', blurb: 'A knowledge source the agent is told to consult.' },
-  { type: 'TestingAction', label: 'Testing Action', icon: '🧪', blurb: 'A command that runs after every loop and gates the result.' },
+  { type: 'TestingAction', label: 'Check', icon: '🧪', blurb: 'A command that runs after every iteration and must exit 0 for the work to count — a test suite, a validator, a link checker, anything scriptable.' },
   { type: 'Rule', label: 'Rule', icon: '📏', blurb: 'Standing instructions appended to the agent’s system prompt.' },
   { type: 'RuleSet', label: 'Rule Set', icon: '📋', blurb: 'A managed collection of rules — add, toggle and remove without the clutter.' },
   { type: 'WorkspacePool', label: 'Dynamic Workspaces', icon: '🗂️', blurb: 'Agents claim a dedicated workspace per unit of work — provisioned on demand, context passed in, cleaned up on retention.' },
-  { type: 'UserAction', label: 'User Action Requests', icon: '🙋', blurb: 'The agent can ask you to do or decide something — the loop parks until you respond, without failing.' },
+  { type: 'UserAction', label: 'Ask the user', icon: '🙋', blurb: 'A tool, not a question: lets the agent raise a User Action Request whenever it needs something only you can do or decide. Attach one; the agent decides what to ask.' },
   { type: 'SubAgent', label: 'Sub-agent', icon: '🤖', blurb: 'A helper agent the main agent can delegate to.' },
   { type: 'Reviewer', label: 'Reviewer', icon: '🧐', blurb: 'An independent agent that reviews the work after every loop — pass, or fail with fix instructions.' },
   { type: 'AzureConnection', label: 'Azure Connection', icon: '☁️', blurb: 'Azure identity exposed as environment variables.' },
-  { type: 'PatToken', label: 'PAT Token', icon: '🔑', blurb: 'A personal access token injected as an environment variable.' },
+  { type: 'PatToken', label: 'API key / secret', icon: '🔑', blurb: 'A secret injected as an environment variable — an API key, a token, a password.' },
 ];
 
 export const MODELS: { id: string; label: string; note: string }[] = [
@@ -469,7 +592,7 @@ export interface DeliveryMetricsDto {
 
 export const AUTONOMY_LEVELS: { level: number; label: string; blurb: string }[] = [
   { level: 1, label: 'L1 · Proposes', blurb: 'Suggests changes; a human executes them.' },
-  { level: 2, label: 'L2 · Sandboxed', blurb: 'Executes in a sandbox; a human approves the diff.' },
+  { level: 2, label: 'L2 · Sandboxed', blurb: 'Executes in a sandbox; a human approves the result before it lands.' },
   { level: 3, label: 'L3 · Autonomous', blurb: 'Executes autonomously; humans review after the fact.' },
   { level: 4, label: 'L4 · Audited', blurb: 'Fully autonomous with sampled audits.' },
 ];
@@ -483,24 +606,57 @@ export interface MapResourceDto {
   customTypeKey: string | null;
   icon: string;
   typeLabel: string;
+  description: string;
   agentIds: string[];
+}
+
+/** An agent as the workbench canvas draws it: identity, trigger, schedule state, 24h activity, wiring. */
+/** A metric attached to an agent with its 30-day reading (total / average / gauge) — the canvas outcome line. */
+export interface MapMetricDto {
+  resourceId: string;
+  name: string;
+  unit: string;
+  current: number | null;
 }
 
 export interface MapAgentDto {
   id: string;
   name: string;
+  description: string;
   model: string;
+  effort: EffortLevel;
   autonomyLevel: number;
   enabled: boolean;
   dryRun: boolean;
   isRunning: boolean;
   intervalMinutes: number;
+  triggerMode: TriggerMode;
+  triggerTopics: string | null;
+  lastRunAtUtc: string | null;
+  nextRunAtUtc: string | null;
   lastRunStatus: RunStatus | null;
   runsLast24h: number;
   costLast24hUsd: number;
   openPrs: number;
   mergedPrs: number;
   resourceIds: string[];
+  metrics: MapMetricDto[];
+  /** Topics this agent raises: its completion topics plus attached Event Raisers. */
+  raises: string[];
+  /** Patterns that wake this agent: its own topics (Event mode) plus attached Event Listeners. */
+  listens: string[];
+}
+
+// ---------- Events ----------
+
+export type EventTopicKind = 'completion' | 'raiser' | 'listener' | 'curation' | 'seen';
+
+/** One entry of the event catalog: a topic (or listen pattern) and where it comes from. */
+export interface EventTopicDto {
+  topic: string;
+  kind: EventTopicKind;
+  source: string;
+  isPattern: boolean;
 }
 
 export interface ArchitectureMapDto {
@@ -569,4 +725,11 @@ export interface UserActionDto {
   response: string | null;
   createdAtUtc: string;
   resolvedAtUtc: string | null;
+  /** Where the answer was recorded when resolved. */
+  resolutionNote: string | null;
+  /** The agent has a memory graph attached, so an answer may be recorded there instead of as a rule. */
+  canRecordToMemory: boolean;
 }
+
+/** Where a resolved request's answer goes — a deterministic edit, never hidden context. */
+export type RecordAs = 'rule' | 'memory' | 'none';

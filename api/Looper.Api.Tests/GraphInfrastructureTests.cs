@@ -291,13 +291,14 @@ public sealed class GraphMaintenanceServiceTests : IDisposable
         var dispatcher = new EventDispatcher(NullLogger<EventDispatcher>.Instance);
         var coordinator = new AgentRunCoordinator(
             new Factory(_options),
-            new ClaudeCliExecutor(looperOptions, registry,
+            new ClaudeCliExecutor(looperOptions, new ClaudeAuthProvider(new Factory(_options)), registry,
                 new GraphContextService(looperOptions, NullLogger<GraphContextService>.Instance),
                 NullLogger<ClaudeCliExecutor>.Instance),
             new SimulatedAgentExecutor(),
             new TestingActionRunner(looperOptions),
             new ScriptRunner(looperOptions),
-            new ReviewRunner(looperOptions, NullLogger<ReviewRunner>.Instance),
+            new MetricRecorder(new Factory(_options), NullLogger<MetricRecorder>.Instance),
+            new ReviewRunner(looperOptions, new ClaudeAuthProvider(new Factory(_options)), NullLogger<ReviewRunner>.Instance),
             dispatcher,
             looperOptions,
             NullLogger<AgentRunCoordinator>.Instance);

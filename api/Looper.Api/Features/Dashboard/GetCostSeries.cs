@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Looper.Api.Features.Dashboard;
 
-public sealed record GetCostSeriesQuery(int Days) : IQuery<IReadOnlyList<CostSeriesPointDto>>;
+public sealed record GetCostSeriesQuery(int Days, Guid? WorkflowId = null) : IQuery<IReadOnlyList<CostSeriesPointDto>>;
 
 public sealed class GetCostSeriesHandler(LooperDbContext db)
     : IQueryHandler<GetCostSeriesQuery, IReadOnlyList<CostSeriesPointDto>>
@@ -17,8 +17,10 @@ public sealed class GetCostSeriesHandler(LooperDbContext db)
         var (_, fromUtc, toUtc) = DashboardWindow.Resolve(query.Days);
 
         // Date grouping in SQL is fragile on SQLite, so fetch a projection and group client-side.
+        var workflowId = query.WorkflowId;
         var runs = await db.Runs
             .Where(r => r.StartedAtUtc >= fromUtc && r.StartedAtUtc < toUtc)
+            .Where(r => workflowId == null || r.Agent!.WorkflowId == workflowId)
             .Select(r => new { r.StartedAtUtc, r.CostUsd, r.Status })
             .ToListAsync(cancellationToken);
 
@@ -42,6 +44,6 @@ public sealed class GetCostSeriesHandler(LooperDbContext db)
 public sealed class GetCostSeriesEndpoint : IEndpoint
 {
     public void Map(IEndpointRouteBuilder app) =>
-        app.MapGet("/api/dashboard/cost-series", (int? days, IDispatcher dispatcher, CancellationToken ct) =>
-            dispatcher.Query(new GetCostSeriesQuery(days ?? 14), ct));
+        app.MapGet("/api/dashboard/cost-series", (int? days, Guid? workflowId, IDispatcher dispatcher, CancellationToken ct) =>
+            dispatcher.Query(new GetCostSeriesQuery(days ?? 14, workflowId), ct));
 }

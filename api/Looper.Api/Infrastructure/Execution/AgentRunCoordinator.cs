@@ -15,6 +15,7 @@ public sealed class AgentRunCoordinator(
     SimulatedAgentExecutor simulatedExecutor,
     TestingActionRunner testingActionRunner,
     ScriptRunner scriptRunner,
+    MetricRecorder metricRecorder,
     ReviewRunner reviewRunner,
     EventDispatcher eventDispatcher,
     IOptions<LooperOptions> options,
@@ -71,27 +72,10 @@ public sealed class AgentRunCoordinator(
             db.Runs.Add(run);
             await db.SaveChangesAsync(cancellationToken);
 
-            // Resolved user-action responses are delivered exactly once, on the next real run.
-            string? userResponses = null;
-            if (!agent.DryRun)
-            {
-                var undelivered = await db.UserActionRequests
-                    .Where(r => r.AgentId == agentId && r.Status == UserActionStatus.Resolved
-                        && r.Response != null && r.ResponseDeliveredAtUtc == null)
-                    .OrderBy(r => r.ResolvedAtUtc)
-                    .ToListAsync(cancellationToken);
-                if (undelivered.Count > 0)
-                {
-                    userResponses = string.Join("\n\n", undelivered.Select(r =>
-                        $"Your request \"{r.Title}\" — the user responded:\n{r.Response}"));
-                    foreach (var r in undelivered) r.ResponseDeliveredAtUtc = DateTime.UtcNow;
-                    await db.SaveChangesAsync(cancellationToken);
-                }
-            }
-
-            // Detach the agent graph from the scoped context; execution runs on its own contexts.
+            // Every iteration starts from a clean context: resolved user-action answers are not
+            // replayed here — they were recorded into the agent's resources, which load below.
             var resources = agent.Resources.ToList();
-            _ = Task.Run(() => ExecuteAsync(agent, resources, active, userResponses, eventContext, eventDepth), CancellationToken.None);
+            _ = Task.Run(() => ExecuteAsync(agent, resources, active, eventContext, eventDepth), CancellationToken.None);
             return active.RunId;
         }
         catch
@@ -110,7 +94,7 @@ public sealed class AgentRunCoordinator(
     }
 
     private async Task ExecuteAsync(LoopAgent agent, IReadOnlyList<Resource> resources, ActiveRun active,
-        string? userResponses = null, string? eventContext = null, int eventDepth = 0)
+        string? eventContext = null, int eventDepth = 0)
     {
         var runId = active.RunId;
         RunLogWriter log = (level, message) => AppendLogAsync(runId, level, message);
@@ -160,9 +144,10 @@ public sealed class AgentRunCoordinator(
                         $"Before-run script(s) {failedNames} failed; the iteration was not started.", 0, 0, 0, 0, 0, 0, 0);
                     await FinalizeAsync(runId, agent.Id, aborted, (TestingActionRunner.Serialize(beforeResults), false),
                         new ReviewInfo(null, 0, null, null));
-                    await RaiseCompletionEventAsync(agent, runId, false, eventDepth);
+                    await RaiseCompletionEventsAsync(agent, resources, runId, aborted, false, eventDepth);
                     return;
                 }
+                await metricRecorder.RecordFromScriptsAsync(agent, resources, runId, beforeResults, log);
             }
             else if (Modules.BuiltIn.ScriptResources.Scripts(resources).Count > 0)
             {
@@ -170,7 +155,7 @@ public sealed class AgentRunCoordinator(
             }
 
             var context = new AgentExecutionContext(agent, resources, runId,
-                UserResponses: userResponses, TriggerEvents: eventContext,
+                TriggerEvents: eventContext,
                 ScriptOutputs: ScriptRunner.BuildPromptSection(beforeResults));
 
             AgentExecutionOutcome outcome;
@@ -190,12 +175,15 @@ public sealed class AgentRunCoordinator(
                 outcome = new AgentExecutionOutcome(false, null, ex.Message, 0, 0, 0, 0, 0, 0, 0);
             }
 
+            // After-run scripts may report metrics too; only the FINAL gate run counts (review fix
+            // rounds re-run the gate, and a sum metric must not be double-counted).
+            var afterResults = new List<TestingActionResult>();
             (string ResultsJson, bool AllPassed)? testResults = null;
             if (outcome.Success && !agent.DryRun)
             {
                 try
                 {
-                    testResults = await RunPostRunGatesAsync(agent, resources, runId, beforeResults, log, linkedCts.Token);
+                    testResults = await RunPostRunGatesAsync(agent, resources, runId, beforeResults, afterResults, log, linkedCts.Token);
                 }
                 catch (OperationCanceledException)
                 {
@@ -215,7 +203,7 @@ public sealed class AgentRunCoordinator(
             try
             {
                 (outcome, testResults, review) = await RunReviewGateAsync(
-                    agent, resources, runId, executor, outcome, testResults, beforeResults, log, linkedCts.Token);
+                    agent, resources, runId, executor, outcome, testResults, beforeResults, afterResults, log, linkedCts.Token);
             }
             catch (OperationCanceledException)
             {
@@ -223,8 +211,19 @@ public sealed class AgentRunCoordinator(
                 return;
             }
 
+            // An honest verdict: a run whose gate failed is not a success, whatever the model
+            // reported. Dashboards, completion events and chained loops all see the truth.
+            if (outcome.Success && testResults is { AllPassed: false } gate)
+            {
+                var failed = TestingActionRunner.Deserialize(gate.ResultsJson).Where(r => !r.Passed).Select(r => $"'{r.Name}'").ToList();
+                var message = $"Gate failed: {(failed.Count > 0 ? string.Join(", ", failed) : "a testing action or script")} — the iteration's work was not accepted.";
+                outcome = outcome with { Success = false, ErrorMessage = Truncate(message, 4000) };
+                await log("error", message);
+            }
+
             await FinalizeAsync(runId, agent.Id, outcome, testResults, review);
-            await RaiseCompletionEventAsync(agent, runId, outcome.Success, eventDepth);
+            if (afterResults.Count > 0) await metricRecorder.RecordFromScriptsAsync(agent, resources, runId, afterResults, log);
+            await RaiseCompletionEventsAsync(agent, resources, runId, outcome, testResults?.AllPassed, eventDepth);
             if (!agent.DryRun) LogOutcomeToGraphInboxes(agent, resources, runId, outcome, review, log);
         }
         catch (Exception ex)
@@ -247,12 +246,16 @@ public sealed class AgentRunCoordinator(
     /// </summary>
     private async Task<(string ResultsJson, bool AllPassed)?> RunPostRunGatesAsync(
         LoopAgent agent, IReadOnlyList<Resource> resources, Guid runId,
-        IReadOnlyList<TestingActionResult> beforeResults, RunLogWriter log, CancellationToken cancellationToken)
+        IReadOnlyList<TestingActionResult> beforeResults, List<TestingActionResult> afterSink,
+        RunLogWriter log, CancellationToken cancellationToken)
     {
         var results = new List<TestingActionResult>(beforeResults);
         results.AddRange(await testingActionRunner.RunAsync(agent, resources, log, cancellationToken));
-        results.AddRange(await scriptRunner.RunStageAsync(
-            Modules.BuiltIn.ScriptModule.TriggerAfter, agent, resources, runId, log, cancellationToken));
+        var after = await scriptRunner.RunStageAsync(
+            Modules.BuiltIn.ScriptModule.TriggerAfter, agent, resources, runId, log, cancellationToken);
+        afterSink.Clear();
+        afterSink.AddRange(after);
+        results.AddRange(after);
         if (results.Count == 0) return null;
         return (TestingActionRunner.Serialize(results), results.All(r => r.Passed));
     }
@@ -270,18 +273,29 @@ public sealed class AgentRunCoordinator(
         AgentExecutionOutcome outcome,
         (string ResultsJson, bool AllPassed)? testResults,
         IReadOnlyList<TestingActionResult> beforeResults,
+        List<TestingActionResult> afterSink,
         RunLogWriter log,
         CancellationToken cancellationToken)
     {
-        var reviewers = resources
+        var attached = resources
             .Where(r => r.Type == ResourceType.Reviewer)
             .Select(r => (Resource: r, Config: ResourceConfig.Parse<ReviewerConfig>(r)))
-            .Where(r => !string.IsNullOrWhiteSpace(r.Config.Rubric))
             .ToList();
+        var reviewers = attached.Where(r => !string.IsNullOrWhiteSpace(r.Config.Rubric)).ToList();
 
         var none = new ReviewInfo(null, 0, null, null);
-        if (reviewers.Count == 0 || !outcome.Success) return (outcome, testResults, none);
+        if (attached.Count == 0 || !outcome.Success) return (outcome, testResults, none);
         if (testResults is { AllPassed: false }) return (outcome, testResults, none); // testing gate already failed
+
+        // A reviewer with nothing to judge against cannot pass anything: fail closed, loudly.
+        var blank = attached.Where(r => string.IsNullOrWhiteSpace(r.Config.Rubric)).Select(r => $"'{r.Resource.Name}'").ToList();
+        if (blank.Count > 0)
+        {
+            var message = $"Reviewer {string.Join(", ", blank)} has no rubric — a gate that cannot judge fails closed. Give it a rubric or detach it.";
+            await log("error", message);
+            return (outcome with { Success = false, ErrorMessage = Truncate(message, 4000) }, testResults,
+                new ReviewInfo(false, 0, null, null));
+        }
 
         if (agent.DryRun)
         {
@@ -366,7 +380,7 @@ public sealed class AgentRunCoordinator(
             }
 
             // A revision can break what the testing gate had already accepted — re-gate it.
-            testResults = await RunPostRunGatesAsync(agent, resources, runId, beforeResults, log, cancellationToken);
+            testResults = await RunPostRunGatesAsync(agent, resources, runId, beforeResults, afterSink, log, cancellationToken);
             if (testResults is { AllPassed: false })
             {
                 await log("error", "Testing actions failed on the revised work; review cannot pass.");
@@ -417,8 +431,15 @@ public sealed class AgentRunCoordinator(
         }
     }
 
-    private async Task RaiseCompletionEventAsync(LoopAgent agent, Guid runId, bool succeeded, int eventDepth)
+    /// <summary>
+    /// The deterministic backbone of the event system: every finished run announces itself
+    /// (agent.&lt;slug&gt;.succeeded/failed), and every attached Event Raiser whose condition
+    /// matches the outcome fires its named event — the harness raises, never the model.
+    /// </summary>
+    private async Task RaiseCompletionEventsAsync(LoopAgent agent, IReadOnlyList<Resource> resources, Guid runId,
+        AgentExecutionOutcome outcome, bool? gatesPassed, int eventDepth)
     {
+        var succeeded = outcome.Success;
         try
         {
             await using var db = await dbFactory.CreateDbContextAsync();
@@ -428,10 +449,19 @@ public sealed class AgentRunCoordinator(
                 $"Agent '{agent.Name}' run {(succeeded ? "succeeded" : "failed")}. Run id: {runId}."
                     + (agent.DryRun ? " (dry run)" : ""),
                 EventSource.Harness, agent.Id, runId, eventDepth, CancellationToken.None);
+
+            foreach (var (resource, config) in Modules.BuiltIn.EventResources.Raisers(resources))
+            {
+                if (!Modules.BuiltIn.EventResources.Fires(config, succeeded, gatesPassed)) continue;
+                var payload = Modules.BuiltIn.EventResources.RenderPayload(
+                    config, agent.Name, runId, succeeded, gatesPassed, outcome.ResultText ?? outcome.ErrorMessage);
+                await eventDispatcher.RaiseAsync(db, config.Topic, payload, EventSource.Harness, agent.Id, runId, eventDepth, CancellationToken.None);
+                await AppendLogAsync(runId, "info", $"Event '{config.Topic}' raised by '{resource.Name}'.");
+            }
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Could not raise completion event for run {RunId}", runId);
+            logger.LogWarning(ex, "Could not raise completion events for run {RunId}", runId);
         }
     }
 

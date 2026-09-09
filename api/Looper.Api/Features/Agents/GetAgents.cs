@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Looper.Api.Features.Agents;
 
-public sealed record GetAgentsQuery : IQuery<IReadOnlyList<AgentSummaryDto>>;
+public sealed record GetAgentsQuery(Guid? WorkflowId = null) : IQuery<IReadOnlyList<AgentSummaryDto>>;
 
 public sealed class GetAgentsHandler(LooperDbContext db, AgentRunCoordinator coordinator)
     : IQueryHandler<GetAgentsQuery, IReadOnlyList<AgentSummaryDto>>
@@ -16,6 +16,7 @@ public sealed class GetAgentsHandler(LooperDbContext db, AgentRunCoordinator coo
     {
         var since = DateTime.UtcNow.AddHours(-24);
         var agents = await db.Agents
+            .Where(a => query.WorkflowId == null || a.WorkflowId == query.WorkflowId)
             .Select(a => new
             {
                 Agent = a,
@@ -39,6 +40,6 @@ public sealed class GetAgentsHandler(LooperDbContext db, AgentRunCoordinator coo
 public sealed class GetAgentsEndpoint : IEndpoint
 {
     public void Map(IEndpointRouteBuilder app) =>
-        app.MapGet("/api/agents", (IDispatcher dispatcher, CancellationToken ct) =>
-            dispatcher.Query(new GetAgentsQuery(), ct));
+        app.MapGet("/api/agents", (Guid? workflowId, IDispatcher dispatcher, CancellationToken ct) =>
+            dispatcher.Query(new GetAgentsQuery(workflowId), ct));
 }

@@ -24,7 +24,7 @@ describe('App', () => {
     const element: HTMLElement = fixture.nativeElement;
     expect(element.querySelector('.brand-name')?.textContent).toContain('Looper');
     const navLinks = [...element.querySelectorAll('.nav a')].map(a => a.textContent?.trim());
-    expect(navLinks).toEqual(['Workbench', 'Map', 'Dashboard']);
+    expect(navLinks).toEqual(['Workbench', 'Dashboard']);
   });
 
   it('shows the setup banner only while Claude Code is missing', () => {
@@ -44,6 +44,22 @@ describe('App', () => {
     (element.querySelector('.banner-btn') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(element.querySelector('app-claude-setup')?.textContent).toContain('Install Claude Code');
+  });
+
+  it('shows the API-key chip only when runs are billed to a key, and opens settings from the gear', () => {
+    const http = TestBed.inject(HttpTestingController);
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const element: HTMLElement = fixture.nativeElement;
+
+    http.expectOne(`${API_BASE}/settings`)
+      .flush({ claudeAuthMode: 'ApiKey', hasApiKey: true, apiKeyHint: '…abcd', updatedAtUtc: '2026-09-09T00:00:00Z' });
+    fixture.detectChanges();
+    expect(element.querySelector('.auth-chip')?.textContent).toContain('API key');
+
+    (element.querySelector('.settings-btn') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(element.querySelector('app-settings-modal')?.textContent).toContain('Claude credentials');
   });
 
   it('hides the banner when Claude Code is available', () => {

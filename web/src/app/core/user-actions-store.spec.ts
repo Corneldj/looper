@@ -18,6 +18,8 @@ function request(overrides: Partial<UserActionDto> = {}): UserActionDto {
     response: null,
     createdAtUtc: '2026-08-26T09:00:00Z',
     resolvedAtUtc: null,
+    resolutionNote: null,
+    canRecordToMemory: false,
     ...overrides,
   };
 }

@@ -1,0 +1,94 @@
+<div class="modal-backdrop">
+  <div class="modal metric-modal">
+    <div class="modal-header">
+      <div>
+        <h2>📈 {{ metric().name }}</h2>
+        <p class="modal-sub">
+          {{ metric().description || 'An outcome you track.' }}
+          <span class="meta num">
+            · {{ metric().aggregation === 'Sum' ? 'total' : metric().aggregation === 'Average' ? 'average' : 'gauge' }}
+            · {{ metric().direction === 'Lower' ? 'lower is better' : 'higher is better' }}
+            @if (metric().target !== null) {
+              · target {{ formatMetric(metric().target!, metric().unit) }}
+            }
+            @if (metric().agents.length > 0) {
+              · attached to {{ metric().agents.join(', ') }}
+            }
+          </span>
+        </p>
+      </div>
+      <button class="icon-btn" title="Close" (click)="close()">✕</button>
+    </div>
+
+    <div class="add-row">
+      <input
+        class="input num value-input"
+        type="number"
+        step="any"
+        placeholder="value"
+        [ngModel]="newValue()"
+        (ngModelChange)="newValue.set($event)"
+        (keydown.enter)="add()"
+      />
+      @if (metric().unit) {
+        <span class="unit">{{ metric().unit }}</span>
+      }
+      <input class="input note-input" placeholder="note — what was measured, and how" [ngModel]="newNote()" (ngModelChange)="newNote.set($event)" (keydown.enter)="add()" />
+      <button type="button" class="btn btn-primary btn-sm" [disabled]="!canAdd()" (click)="add()">Add value</button>
+    </div>
+
+    @if (error(); as message) {
+      <p class="modal-error">{{ message }}</p>
+    }
+
+    @if (!loaded()) {
+      <p class="loading-note">Loading…</p>
+    } @else if (values().length === 0) {
+      <div class="empty-state">
+        <div class="glyph">📈</div>
+        <h3>No values yet</h3>
+        <p>Attach this metric to an agent and it gets the reporting protocol; a script can print an <span class="mono">&#64;metric</span> line; or add one above.</p>
+      </div>
+    } @else {
+      <div class="table-wrap values">
+        <table class="data">
+          <thead>
+            <tr>
+              <th>When</th>
+              <th class="r">Value</th>
+              <th>Note</th>
+              <th>By</th>
+              <th>Source</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (v of values(); track v.id) {
+              <tr>
+                <td class="when num">{{ formatDateTime(v.recordedAtUtc) }}</td>
+                <td class="r num strong">{{ formatMetric(v.value, metric().unit) }}</td>
+                <td class="note" [title]="v.note ?? ''">{{ v.note || '—' }}</td>
+                <td class="by">{{ v.agentName || '—' }}</td>
+                <td><span class="chip {{ sourceChip(v.source) }}">{{ v.source }}</span></td>
+                <td class="r"><button class="icon-btn" title="Remove this value" (click)="remove(v)">✕</button></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    <details class="howto">
+      <summary>How values get here</summary>
+      <p class="howto-text">Attached agents receive this protocol automatically in every real run:</p>
+      <pre class="mono">{{ curlSnippet() }}</pre>
+      <p class="howto-text">Any Script resource (before or after an iteration) can report by printing:</p>
+      <pre class="mono">{{ scriptSnippet() }}</pre>
+    </details>
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" (click)="reload()">Refresh</button>
+      <button class="btn btn-primary" (click)="close()">Close</button>
+    </div>
+  </div>
+</div>

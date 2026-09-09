@@ -2,12 +2,78 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { catchError, of, timer, switchMap } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService } from './api.service';
-import { AgentSummaryDto, ClaudeStatusDto, GraphStatusDto, RESOURCE_TYPES, ResourceDto, ResourceTypeDto, UserActionDto } from './models';
+import { AgentSummaryDto, ClaudeStatusDto, GraphStatusDto, RESOURCE_TYPES, ResourceDto, ResourceTypeDto, SettingsDto, UserActionDto, WorkflowDto } from './models';
 
-/** Holds the resource list shared by the workbench panels and agent editor. */
+/**
+ * Which workbench you are looking at. One global selection, remembered across reloads:
+ * the workbench shows that workflow, the dashboard defaults to it, new items go into it.
+ */
+@Injectable({ providedIn: 'root' })
+export class WorkflowsStore {
+  private static readonly storageKey = 'looper.workflow';
+  private readonly api = inject(ApiService);
+
+  readonly workflows = signal<WorkflowDto[]>([]);
+  readonly loaded = signal(false);
+  readonly selectedId = signal<string | null>(WorkflowsStore.readStored());
+  readonly selected = computed(() => this.workflows().find(w => w.id === this.selectedId()) ?? null);
+
+  load(): void {
+    this.api.getWorkflows().subscribe({
+      next: list => {
+        this.workflows.set(list);
+        this.loaded.set(true);
+        const current = this.selectedId();
+        if (!current || !list.some(w => w.id === current)) {
+          this.select(list.find(w => w.isDefault)?.id ?? list[0]?.id ?? null);
+        }
+      },
+      error: () => this.loaded.set(true),
+    });
+  }
+
+  select(id: string | null): void {
+    this.selectedId.set(id);
+    try {
+      if (id) localStorage.setItem(WorkflowsStore.storageKey, id);
+      else localStorage.removeItem(WorkflowsStore.storageKey);
+    } catch {
+      // Storage can be unavailable (private mode); the selection still works for the session.
+    }
+  }
+
+  upsert(workflow: WorkflowDto): void {
+    this.workflows.update(list => {
+      const index = list.findIndex(w => w.id === workflow.id);
+      if (index < 0) return [...list, workflow];
+      const next = [...list];
+      next[index] = workflow;
+      return next;
+    });
+  }
+
+  remove(id: string): void {
+    this.workflows.update(list => list.filter(w => w.id !== id));
+    if (this.selectedId() === id) {
+      const list = this.workflows();
+      this.select(list.find(w => w.isDefault)?.id ?? list[0]?.id ?? null);
+    }
+  }
+
+  private static readStored(): string | null {
+    try {
+      return localStorage.getItem(WorkflowsStore.storageKey);
+    } catch {
+      return null;
+    }
+  }
+}
+
+/** Holds the resource list of the selected workflow, shared by the workbench and the editors. */
 @Injectable({ providedIn: 'root' })
 export class ResourcesStore {
   private readonly api = inject(ApiService);
+  private readonly workflowsStore = inject(WorkflowsStore);
 
   readonly resources = signal<ResourceDto[]>([]);
   /** Graph resources as infrastructure: curator wiring + last measured health, by resource id. */
@@ -16,9 +82,10 @@ export class ResourcesStore {
   /** True when the last load failed — the panel shows a retry state instead of "no resources". */
   readonly failed = signal(false);
 
+  /** Loads the selected workflow's resources (all of them while no workflow is selected yet). */
   load(): void {
     this.loadGraphs();
-    this.api.getResources().subscribe({
+    this.api.getResources(undefined, this.workflowsStore.selectedId()).subscribe({
       next: resources => {
         this.resources.set(resources);
         this.loaded.set(true);
@@ -227,5 +294,39 @@ export class UserActionsStore {
 
   forAgent(agentId: string): UserActionDto[] {
     return this.open().filter(r => r.agentId === agentId);
+  }
+}
+
+/**
+ * App-wide settings, loaded once so the shell can show which Claude credentials are in use.
+ * The settings modal saves through the API and hands the result back here.
+ */
+@Injectable({ providedIn: 'root' })
+export class SettingsStore {
+  private readonly api = inject(ApiService);
+
+  readonly settings = signal<SettingsDto | null>(null);
+  readonly loaded = signal(false);
+
+  /** True when runs are billed to a stored API key instead of the Claude Code subscription. */
+  readonly usingApiKey = computed(() => this.settings()?.claudeAuthMode === 'ApiKey');
+
+  constructor() {
+    this.load();
+  }
+
+  load(): void {
+    this.api.getSettings().subscribe({
+      next: settings => {
+        this.settings.set(settings);
+        this.loaded.set(true);
+      },
+      error: () => this.loaded.set(true),
+    });
+  }
+
+  apply(settings: SettingsDto): void {
+    this.settings.set(settings);
+    this.loaded.set(true);
   }
 }

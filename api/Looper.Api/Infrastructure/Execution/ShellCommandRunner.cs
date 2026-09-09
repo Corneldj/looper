@@ -73,10 +73,20 @@ public static class ShellCommandRunner
         }
     }
 
+    /// <summary>
+    /// Keeps the last <paramref name="max"/> characters — plus every `@metric` line from the part
+    /// that was cut, so a chatty script never loses a measurement to truncation.
+    /// </summary>
     private static string Tail(string value, int max)
     {
         var trimmed = value.Trim();
-        return trimmed.Length <= max ? trimmed : "…" + trimmed[^max..];
+        if (trimmed.Length <= max) return trimmed;
+        var head = trimmed[..^max];
+        var kept = head.Split('\n')
+            .Where(line => line.TrimStart().StartsWith("@metric", StringComparison.Ordinal))
+            .Select(line => line.Trim())
+            .ToList();
+        return (kept.Count > 0 ? string.Join('\n', kept) + "\n" : "") + "…" + trimmed[^max..];
     }
 
     private static void TryKill(Process process)

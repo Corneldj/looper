@@ -45,6 +45,17 @@ public sealed partial class EventDispatcher(ILogger<EventDispatcher> logger)
         return slug.Length == 0 ? fallback : slug;
     }
 
+    /// <summary>
+    /// What an agent listens for: its own topic list when it is in Event mode, plus every attached
+    /// Event Listener resource regardless of mode — a listener wired on the canvas always counts.
+    /// </summary>
+    public static IReadOnlyList<string> EffectivePatterns(TriggerMode mode, string? triggerTopics,
+        IEnumerable<string> listenerConfigJsons) =>
+        (mode == TriggerMode.Event ? ParsePatterns(triggerTopics) : [])
+            .Concat(listenerConfigJsons.Select(Modules.BuiltIn.EventResources.ListenerPattern).Where(IsValidPattern))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
     /// <summary>agent.&lt;name-slug&gt;.&lt;succeeded|failed&gt; — the stable key other loops chain off.</summary>
     public static string CompletionTopic(string agentName, bool succeeded) =>
         $"agent.{Slug(agentName, "agent")}.{(succeeded ? "succeeded" : "failed")}";
@@ -81,14 +92,20 @@ public sealed partial class EventDispatcher(ILogger<EventDispatcher> logger)
         else
         {
             var listeners = await db.Agents.AsNoTracking()
-                .Where(a => a.Enabled && a.TriggerMode == TriggerMode.Event && a.TriggerTopics != null)
+                .Where(a => a.Enabled)
                 .Where(a => sourceAgentId == null || a.Id != sourceAgentId) // never trigger yourself
-                .Select(a => new { a.Id, a.TriggerTopics })
+                .Select(a => new
+                {
+                    a.Id, a.TriggerMode, a.TriggerTopics,
+                    Listeners = a.Resources
+                        .Where(r => r.Type == ResourceType.Custom && r.CustomTypeKey == Modules.BuiltIn.EventListenerModule.TypeKey_)
+                        .Select(r => r.ConfigJson).ToList()
+                })
                 .ToListAsync(cancellationToken);
 
             foreach (var listener in listeners)
             {
-                if (ParsePatterns(listener.TriggerTopics).Any(p => Matches(p, topic)))
+                if (EffectivePatterns(listener.TriggerMode, listener.TriggerTopics, listener.Listeners).Any(p => Matches(p, topic)))
                 {
                     db.EventDeliveries.Add(new EventDelivery { EventId = evt.Id, AgentId = listener.Id });
                 }
@@ -119,8 +136,15 @@ public sealed partial class EventDispatcher(ILogger<EventDispatcher> logger)
             var agentId = group.Key;
             if (coordinator.IsRunning(agentId)) continue;
 
-            var agent = await db.Agents.AsNoTracking().FirstOrDefaultAsync(a => a.Id == agentId, cancellationToken);
-            if (agent is null || !agent.Enabled || agent.TriggerMode != TriggerMode.Event)
+            var agent = await db.Agents.AsNoTracking()
+                .Where(a => a.Id == agentId)
+                .Select(a => new
+                {
+                    a.Enabled, a.TriggerMode,
+                    HasListener = a.Resources.Any(r => r.Type == ResourceType.Custom && r.CustomTypeKey == Modules.BuiltIn.EventListenerModule.TypeKey_)
+                })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (agent is null || !agent.Enabled || (agent.TriggerMode != TriggerMode.Event && !agent.HasListener))
             {
                 // No longer a listener — these deliveries will never be wanted.
                 foreach (var delivery in group) delivery.Status = DeliveryStatus.Skipped;

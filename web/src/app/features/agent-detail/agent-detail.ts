@@ -10,6 +10,7 @@ import {
   AUTONOMY_LEVELS,
   EFFORT_LEVELS,
   EffortLevel,
+  RecordAs,
   RunDetailDto,
   RunStatus,
   RunSummaryDto,
@@ -166,14 +167,30 @@ export class AgentDetail {
     this.actionResponses.set(requestId, (event.target as HTMLTextAreaElement).value);
   }
 
+  /** Where each request's answer will be recorded; defaults to a standing rule. */
+  protected readonly recordAs = new Map<string, RecordAs>();
+
+  protected recordAsFor(requestId: string): RecordAs {
+    return this.recordAs.get(requestId) ?? 'rule';
+  }
+
+  protected setRecordAs(requestId: string, value: RecordAs): void {
+    this.recordAs.set(requestId, value);
+  }
+
+  protected hasResponse(requestId: string): boolean {
+    return (this.actionResponses.get(requestId)?.trim().length ?? 0) > 0;
+  }
+
   protected resolveAction(request: UserActionDto): void {
     if (this.resolvingActionId() !== null) return;
     this.resolvingActionId.set(request.id);
     const response = this.actionResponses.get(request.id)?.trim();
-    this.api.resolveUserAction(request.id, response || undefined).subscribe({
+    this.api.resolveUserAction(request.id, response || undefined, this.recordAsFor(request.id)).subscribe({
       next: () => {
         this.resolvingActionId.set(null);
         this.actionResponses.delete(request.id);
+        this.recordAs.delete(request.id);
         this.userActionsStore.refreshNow();
         this.refresh$.next();
       },

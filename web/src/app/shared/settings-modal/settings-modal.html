@@ -1,0 +1,98 @@
+<div class="modal-backdrop">
+  <div class="modal settings-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Settings</h2>
+      <button class="icon-btn" title="Close" [disabled]="saving()" (click)="cancel()">✕</button>
+    </div>
+
+    <section class="settings-section">
+      <h3>Claude credentials</h3>
+      <p class="section-blurb">
+        Every real agent run, review, script assist, module build and architect run launches the
+        Claude Code CLI on the API machine. Choose what it signs in with.
+      </p>
+
+      @if (loadError(); as message) {
+        <p class="save-error">{{ message }}</p>
+      } @else if (!current()) {
+        <p class="hint">Loading…</p>
+      } @else {
+        <div class="auth-options">
+          <label class="auth-option" [class.selected]="mode() === 'Subscription'">
+            <input type="radio" name="claude-auth" value="Subscription" [checked]="mode() === 'Subscription'" (change)="selectMode('Subscription')" />
+            <span class="option-title">Claude Code subscription</span>
+            <span class="option-hint">
+              The login on this machine — run <span class="mono">claude</span> once in a terminal to sign in.
+              Usage counts against the subscription. An <span class="mono">ANTHROPIC_API_KEY</span> in the
+              server’s environment is ignored so the subscription is really what gets used.
+            </span>
+          </label>
+          <label class="auth-option" [class.selected]="mode() === 'ApiKey'">
+            <input type="radio" name="claude-auth" value="ApiKey" [checked]="mode() === 'ApiKey'" (change)="selectMode('ApiKey')" />
+            <span class="option-title">API key</span>
+            <span class="option-hint">
+              An Anthropic API key from <span class="mono">console.anthropic.com</span>. Every run is billed
+              to it at API rates. The run log records which credentials were used.
+            </span>
+          </label>
+        </div>
+
+        @if (mode() === 'ApiKey') {
+          <div class="field key-field">
+            <label>API key</label>
+            @if (hasStoredKey() && !replacing()) {
+              <div class="stored-key">
+                <span class="mono">sk-ant-{{ current()?.apiKeyHint }}</span>
+                <span class="chip chip-green">Stored</span>
+                <span class="spacer"></span>
+                <button class="btn btn-ghost btn-sm" (click)="replaceKey()">Replace</button>
+                <button class="btn btn-ghost btn-sm remove-key" (click)="removeKey()">Remove</button>
+              </div>
+            } @else {
+              <input
+                class="input mono"
+                type="password"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="sk-ant-api03-…"
+                [ngModel]="apiKey()"
+                (ngModelChange)="apiKey.set($event)"
+                (keydown.enter)="save()"
+              />
+              @if (replacing()) {
+                <span class="hint">Leave empty to keep the stored key. <button class="link-btn" (click)="keepKey()">Cancel replace</button></span>
+              } @else if (removing()) {
+                <span class="hint">The stored key is removed when you save. <button class="link-btn" (click)="keepKey()">Keep it</button></span>
+              } @else {
+                <span class="hint">Kept in Looper’s database on the API machine and handed only to the CLI process. It is never shown again.</span>
+              }
+            }
+          </div>
+        } @else if (current()?.hasApiKey) {
+          <div class="field key-field">
+            <div class="stored-key">
+              @if (removing()) {
+                <span class="hint">The stored key (<span class="mono">sk-ant-{{ current()?.apiKeyHint }}</span>) is removed when you save.</span>
+                <span class="spacer"></span>
+                <button class="btn btn-ghost btn-sm" (click)="keepKey()">Keep it</button>
+              } @else {
+                <span class="hint">A key ending in <span class="mono">{{ current()?.apiKeyHint }}</span> stays stored, unused, for when you switch back.</span>
+                <span class="spacer"></span>
+                <button class="btn btn-ghost btn-sm remove-key" (click)="removeKey()">Remove</button>
+              }
+            </div>
+          </div>
+        }
+      }
+    </section>
+
+    @if (error(); as message) {
+      <p class="save-error">{{ message }}</p>
+    }
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" [disabled]="saving()" (click)="cancel()">Cancel</button>
+      <button class="btn btn-primary" [disabled]="!canSave()" (click)="save()">{{ saving() ? 'Saving…' : 'Save' }}</button>
+    </div>
+  </div>
+</div>

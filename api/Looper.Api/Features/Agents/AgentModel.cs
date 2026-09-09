@@ -22,7 +22,8 @@ public sealed record AgentSummaryDto(
     DateTime? NextRunAtUtc,
     RunStatus? LastRunStatus,
     int RunsLast24h,
-    decimal CostLast24hUsd);
+    decimal CostLast24hUsd,
+    Guid WorkflowId);
 
 public sealed record AgentDetailDto(
     Guid Id,
@@ -50,7 +51,8 @@ public sealed record AgentDetailDto(
     string? AllowedTools,
     bool BypassPermissions,
     List<Guid> ResourceIds,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    Guid WorkflowId);
 
 /// <summary>Shared request body for creating and updating an agent.</summary>
 public sealed record SaveAgentRequest(
@@ -69,7 +71,9 @@ public sealed record SaveAgentRequest(
     bool BypassPermissions,
     bool DryRun,
     int AutonomyLevel,
-    List<Guid> ResourceIds);
+    List<Guid> ResourceIds,
+    /// <summary>Workflow for a new agent (default workflow when omitted); ignored on update — agents don't move.</summary>
+    Guid? WorkflowId = null);
 
 /// <summary>Run-derived figures shown alongside an agent: latest outcome and 24h activity.</summary>
 public sealed record AgentRunStats(RunStatus? LastRunStatus, int RunsLast24h, decimal CostLast24hUsd)
@@ -97,7 +101,8 @@ public static class AgentMapper
         agent.NextRunAtUtc,
         stats.LastRunStatus,
         stats.RunsLast24h,
-        stats.CostLast24hUsd);
+        stats.CostLast24hUsd,
+        agent.WorkflowId);
 
     /// <summary>Requires <see cref="LoopAgent.Resources"/> to be loaded.</summary>
     public static AgentDetailDto ToDetailDto(this LoopAgent agent, bool isRunning, AgentRunStats stats) => new(
@@ -126,7 +131,8 @@ public static class AgentMapper
         agent.AllowedTools,
         agent.BypassPermissions,
         agent.Resources.Select(r => r.Id).ToList(),
-        agent.CreatedAtUtc);
+        agent.CreatedAtUtc,
+        agent.WorkflowId);
 
     /// <summary>Copies the editable fields onto the entity. Scheduling state (Enabled/NextRunAtUtc) is not touched.</summary>
     public static void Apply(this SaveAgentRequest request, LoopAgent agent)

@@ -9,7 +9,8 @@ using Looper.Api.Modules;
 namespace Looper.Api.Features.Resources;
 
 public sealed record CreateResourceCommand(
-    string Name, ResourceType Type, string? CustomTypeKey, string Description, string ConfigJson) : ICommand<ResourceDto>;
+    string Name, ResourceType Type, string? CustomTypeKey, string Description, string ConfigJson,
+    Guid? WorkflowId = null) : ICommand<ResourceDto>;
 
 public sealed class CreateResourceValidator : AbstractValidator<CreateResourceCommand>
 {
@@ -42,6 +43,7 @@ public sealed class CreateResourceHandler(LooperDbContext db, ResourceModuleRegi
     {
         var resource = new Resource
         {
+            WorkflowId = await Workflows.WorkflowMapper.ResolveAsync(db, command.WorkflowId, cancellationToken),
             Name = command.Name.Trim(),
             Type = command.Type,
             Description = command.Description.Trim(),
@@ -66,7 +68,7 @@ public sealed class CreateResourceHandler(LooperDbContext db, ResourceModuleRegi
             }
             catch (Exception ex)
             {
-                throw new ValidationException($"The resource's workspace could not be prepared: {ex.Message}");
+                throw new ValidationException($"The resource could not be prepared: {ex.Message}");
             }
         }
 

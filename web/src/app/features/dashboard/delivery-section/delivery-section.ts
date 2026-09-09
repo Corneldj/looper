@@ -23,6 +23,10 @@ export class DeliverySection {
 
   /** Reporting window in days — follows the dashboard period selector. */
   readonly days = input<number>(30);
+  /** Workflow filter from the dashboard; null = every workflow. */
+  readonly workflowId = input<string | null>(null);
+
+  private readonly scope = computed(() => ({ days: this.days(), workflowId: this.workflowId() }));
 
   protected readonly metrics = signal<DeliveryMetricsDto | null>(null);
   protected readonly prs = signal<PullRequestDto[]>([]);
@@ -47,21 +51,36 @@ export class DeliverySection {
     [...this.prs()].sort((a, b) => b.openedAtUtc.localeCompare(a.openedAtUtc)),
   );
 
+  /** True once anything PR-shaped exists in the period — the signal that this outcome family is in use. */
+  protected readonly hasPrData = computed(() => {
+    const m = this.metrics();
+    return this.prs().length > 0 || (m !== null && m.mergedPrs + m.openPrs + m.closedPrs > 0);
+  });
+
+  /** User override of the fold; null = follow the data (folded while there are no PRs). */
+  private readonly foldOverride = signal<boolean | null>(null);
+
+  protected readonly folded = computed(() => this.foldOverride() ?? !this.hasPrData());
+
+  protected toggleFold(): void {
+    this.foldOverride.set(!this.folded());
+  }
+
   constructor() {
     // Refetch when the period changes, poll every 60s.
-    toObservable(this.days)
+    toObservable(this.scope)
       .pipe(
-        switchMap(days => timer(0, 60_000).pipe(map(() => days))),
-        switchMap(days => this.fetch(days)),
+        switchMap(scope => timer(0, 60_000).pipe(map(() => scope))),
+        switchMap(({ days, workflowId }) => this.fetch(days, workflowId)),
         takeUntilDestroyed(),
       )
       .subscribe(result => this.apply(result));
   }
 
-  private fetch(days: number) {
+  private fetch(days: number, workflowId: string | null) {
     return forkJoin({
-      metrics: this.api.getDeliveryMetrics(days).pipe(catchError(() => of(null))),
-      prs: this.api.getPullRequests(days).pipe(catchError(() => of(null))),
+      metrics: this.api.getDeliveryMetrics(days, workflowId).pipe(catchError(() => of(null))),
+      prs: this.api.getPullRequests(days, undefined, workflowId).pipe(catchError(() => of(null))),
     });
   }
 
@@ -75,7 +94,7 @@ export class DeliverySection {
   /** One-off metrics refresh after a mutation, so the tiles keep step with the table. */
   private refreshMetrics(): void {
     this.api
-      .getDeliveryMetrics(this.days())
+      .getDeliveryMetrics(this.days(), this.workflowId())
       .pipe(catchError(() => of(null)))
       .subscribe(metrics => {
         if (metrics) this.metrics.set(metrics);

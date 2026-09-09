@@ -1,8 +1,298 @@
-<div class="page workbench">
-  <aside class="resources-column">
-    <app-resource-panel />
-  </aside>
-  <section class="agents-column">
-    <app-agent-panel />
-  </section>
+<div class="page workbench" #page>
+  <div class="page-header">
+    <div>
+      <h1 class="title-row">
+        Workbench
+        @if (workflowsStore.selected(); as w) {
+          <span class="chip chip-accent workflow-chip" [title]="w.description || 'The workflow you are looking at — switch it in the topbar'">{{ w.name }}</span>
+        }
+      </h1>
+      <p class="subtitle">
+        Resources feed agents, agents produce outcomes. Drag a resource’s
+        <span class="port-glyph" aria-hidden="true"></span> onto an agent to connect them; hover a line to cut it.
+      </p>
+    </div>
+    <div class="header-actions">
+      <span class="legend" aria-hidden="true">
+        <span class="legend-item"><span class="status-dot running"></span>Running</span>
+        <span class="legend-item"><span class="status-dot scheduled"></span>Scheduled</span>
+        <span class="legend-item"><span class="status-dot paused"></span>Paused</span>
+        <span class="legend-item"><span class="event-glyph"></span>Event chain</span>
+      </span>
+      <button type="button" class="btn btn-soft" (click)="architectOpen.set(true)">✨ Architect</button>
+      <button type="button" class="btn btn-ghost" (click)="newResource()">+ Resource</button>
+      <button type="button" class="btn btn-primary" (click)="newAgent()">+ Agent</button>
+    </div>
+  </div>
+
+  @if (error(); as message) {
+    <p class="panel-error">
+      <span>{{ message }}</span>
+      <button type="button" class="icon-btn" title="Dismiss" (click)="error.set(null)">✕</button>
+    </p>
+  }
+
+  @if (!loaded()) {
+    <p class="loading-note">Mapping the workspace…</p>
+  } @else if (offline()) {
+    <div class="empty-state card">
+      <div class="glyph">📡</div>
+      <h3>Can’t reach the Looper API</h3>
+      <p>Start the API (<span class="mono">dotnet run</span> in <span class="mono">api/</span>) and the workbench will draw itself.</p>
+      <button type="button" class="btn btn-soft btn-sm first-action" (click)="refreshMap()">Retry</button>
+    </div>
+  } @else if (isEmpty()) {
+    <div class="empty-state card">
+      <div class="glyph">∞</div>
+      <h3>Nothing in {{ workflowsStore.selected()?.name ?? 'this workflow' }} yet</h3>
+      <p>Resources are what agents work with; agents are the loops that use them. Start with either — or describe the whole workflow to the Architect.</p>
+      <div class="empty-actions">
+        <button type="button" class="btn btn-ghost" (click)="newResource()">+ Resource</button>
+        <button type="button" class="btn btn-primary" (click)="newAgent()">+ Agent</button>
+        <button type="button" class="btn btn-soft" (click)="architectOpen.set(true)">✨ Architect</button>
+      </div>
+    </div>
+  } @else {
+    @if (layout(); as l) {
+      <div class="map-canvas" #canvas [class.dragging]="drag()" [style.height.px]="l.height">
+        <svg class="edges" [attr.width]="l.width" [attr.height]="l.height" [attr.viewBox]="'0 0 ' + l.width + ' ' + l.height" aria-hidden="true">
+          <defs>
+            <marker id="event-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 8 4 L 0 8 z" />
+            </marker>
+          </defs>
+          @for (edge of l.eventEdges; track edge.fromAgentId + '>' + edge.toAgentId) {
+            <path class="edge event {{ eventEdgeClass(edge) }}" [attr.d]="edge.path" marker-end="url(#event-arrow)">
+              <title>{{ edge.topics.join(', ') }}</title>
+            </path>
+          }
+          @for (edge of l.edges; track $index) {
+            <path [attr.d]="edge.path" [class]="edgeClass(edge)" />
+            @if (edge.resourceId) {
+              <path class="edge-hit" [attr.d]="edge.path" (mouseenter)="onEdgeEnter(edge)" (mouseleave)="onEdgeLeave()" />
+            }
+          }
+          @if (draftPath(); as draft) {
+            <path
+              class="edge draft"
+              [class.allowed]="drag()?.allowed"
+              [class.blocked]="drag()?.over && !drag()?.allowed"
+              [attr.d]="draft"
+            />
+          }
+        </svg>
+
+        <div class="nodes">
+          <span class="section-label col-label" [style.left.px]="l.columns.resources">
+            Resources
+            <button type="button" class="col-add" title="New resource" aria-label="New resource" (click)="newResource()"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+          </span>
+          <span class="section-label col-label" [style.left.px]="l.columns.agents">
+            Agents
+            <button type="button" class="col-add" title="New agent" aria-label="New agent" (click)="newAgent()"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+          </span>
+          <span class="section-label col-label" [style.left.px]="l.columns.delivery">Outcomes</span>
+
+          @for (group of l.groups; track group.label) {
+            <div class="group-label section-label" [style.top.px]="group.y">
+              <span>{{ group.icon }}</span>{{ group.label }}
+            </div>
+          }
+
+          @for (node of l.resources; track node.data.id) {
+            <div
+              class="node resource {{ nodeClass('resource', node.data.id) }}"
+              [class.unused]="node.data.agentIds.length === 0"
+              [class.wiring]="drag()?.resourceId === node.data.id"
+              [style.left.px]="node.x" [style.top.px]="node.y" [style.width.px]="node.w" [style.height.px]="node.h"
+              [title]="node.data.description || (node.data.typeLabel + (node.data.agentIds.length === 0 ? ' — not connected to any agent yet' : ' — used by ' + node.data.agentIds.length + ' agent(s)'))"
+              (mouseenter)="setHover('resource', node.data.id)" (mouseleave)="clearHover()"
+            >
+              <span class="res-icon">{{ node.data.icon }}</span>
+              <span class="res-name">{{ node.data.name }}</span>
+              @if (graphFor(node.data.id); as graph) {
+                @if (graph.health && (graph.health.inboxPending > 0 || graph.health.competingCount + graph.health.problemCount > 0)) {
+                  <span class="chip chip-amber mini" [title]="graph.health.inboxPending + ' inbox item(s) pending · ' + (graph.health.competingCount + graph.health.problemCount) + ' issue(s)'">
+                    📥 {{ graph.health.inboxPending }}
+                  </span>
+                } @else if (graph.curator) {
+                  <span class="chip chip-accent mini" [title]="'Curated by ' + graph.curator">🧑‍🔧</span>
+                }
+              }
+              <span class="res-actions">
+                @if (isScript(node.data)) {
+                  <button type="button" class="icon-btn" title="Run script now" (click)="runScript(node.data)">▶️</button>
+                }
+                @if (isPool(node.data)) {
+                  <button type="button" class="icon-btn" title="Workspaces" (click)="openWorkspaces(node.data)">🗂️</button>
+                }
+                <button type="button" class="icon-btn" title="Edit" (click)="editResource(node.data)">✏️</button>
+                <button type="button" class="icon-btn" title="Delete" (click)="deleteResource(node.data)">🗑️</button>
+              </span>
+              <button
+                type="button"
+                class="port"
+                title="Drag onto an agent to connect"
+                aria-label="Connect to an agent"
+                (pointerdown)="onPortDown($event, node)"
+              ></button>
+            </div>
+          }
+
+          @for (node of l.agents; track node.data.id) {
+            <div
+              class="node agent {{ nodeClass('agent', node.data.id) }} {{ agentDropClass(node.data.id) }}"
+              [attr.data-agent-id]="node.data.id"
+              [style.left.px]="node.x" [style.top.px]="node.y" [style.width.px]="node.w" [style.height.px]="node.h"
+              (mouseenter)="setHover('agent', node.data.id)" (mouseleave)="clearHover()"
+            >
+              <div class="agent-top">
+                <span class="status-dot {{ agentStatus(node.data).cls }}" [title]="agentStatus(node.data).label"></span>
+                <a class="agent-name" [routerLink]="['/agents', node.data.id]" [title]="node.data.description || 'Open ' + node.data.name">{{ node.data.name }}</a>
+                <span class="agent-chips">
+                  @if (openRequests(node.data.id).length > 0) {
+                    <span class="chip chip-amber mini" [title]="openRequests(node.data.id)[0].title">🙋</span>
+                  }
+                  @if (node.data.dryRun) {
+                    <span class="chip chip-amber mini">Dry</span>
+                  }
+                  @if (raisedTopics(node.data).length > 0) {
+                    <span class="chip chip-accent mini" [title]="'Raises: ' + raisedTopics(node.data).join(', ')">📣</span>
+                  }
+                  @if (node.data.listens.length > 0) {
+                    <span class="chip chip-accent mini" [title]="'Listens for: ' + node.data.listens.join(', ')">📡</span>
+                  }
+                </span>
+              </div>
+              <div class="agent-meta">
+                {{ modelShortName(node.data.model) }}
+                · <span [title]="autonomyBlurb(node.data.autonomyLevel)">L{{ node.data.autonomyLevel }}</span>
+                · {{ effortLabel(node.data.effort) }}
+                · <span [title]="node.data.triggerMode === 'Event' ? 'Listens for: ' + (node.data.triggerTopics || '') : ''">{{
+                  node.data.triggerMode === 'Event' ? '⚡ on events' : formatInterval(node.data.intervalMinutes)
+                }}</span>
+              </div>
+              <div class="agent-stats">
+                <span class="stat" [title]="'Last run ' + relativeTime(node.data.lastRunAtUtc)">
+                  <span class="stat-label">Last</span>
+                  {{ relativeTime(node.data.lastRunAtUtc) }}
+                  @if (node.data.lastRunStatus; as status) {
+                    <span class="chip mini {{ statusChipClass(status) }}">{{ statusLabel(status) }}</span>
+                  }
+                </span>
+                <span class="stat">
+                  <span class="stat-label">Next</span>
+                  {{ node.data.enabled ? (node.data.triggerMode === 'Event' ? 'on event' : relativeTime(node.data.nextRunAtUtc)) : '—' }}
+                </span>
+                <span class="stat num">
+                  <span class="stat-label">24h</span>
+                  {{ node.data.runsLast24h }} runs · {{ formatCost(node.data.costLast24hUsd) }}
+                </span>
+              </div>
+              <div class="agent-actions">
+                <label class="switch" [title]="node.data.enabled ? 'Pause the loop' : 'Enable the loop'">
+                  <input type="checkbox" [checked]="node.data.enabled" (change)="toggleEnabled(node.data, $event)" />
+                  <span class="track"></span>
+                </label>
+                <button
+                  type="button"
+                  class="btn btn-soft btn-xs"
+                  [disabled]="node.data.isRunning || hasBlockingRequest(node.data.id)"
+                  [title]="hasBlockingRequest(node.data.id) ? 'Resolve the user action request first' : 'Start an iteration now'"
+                  (click)="runNow(node.data)"
+                >Run now</button>
+                @if (node.data.isRunning) {
+                  <button type="button" class="btn btn-danger btn-xs" (click)="cancelRun(node.data)">Cancel</button>
+                }
+                <span class="spacer"></span>
+                <button type="button" class="icon-btn" title="Edit agent" [disabled]="editLoadingId() !== null" (click)="editAgent(node.data)">✎</button>
+                <button type="button" class="icon-btn" title="Delete agent" (click)="deleteAgent(node.data)">🗑</button>
+              </div>
+            </div>
+          }
+
+          @for (node of l.delivery; track node.data.id) {
+            <div
+              class="node delivery {{ nodeClass('delivery', node.data.id) }}"
+              [class.quiet]="outcomeLines(node.data).length === 0"
+              [style.left.px]="node.x" [style.top.px]="node.y" [style.width.px]="node.w" [style.height.px]="node.h"
+              [title]="outcomeTitle(node.data)"
+            >
+              @if (outcomeLines(node.data); as lines) {
+                @if (lines.length === 0) {
+                  <span class="deliv-main quiet-text">no outcomes yet</span>
+                  <span class="deliv-sub">{{ formatCost(node.data.costLast24hUsd) }} / 24h</span>
+                } @else {
+                  @for (line of lines; track $index) {
+                    <span class="deliv-line">
+                      <span class="deliv-label">{{ line.label }}</span>
+                      <span class="deliv-main">{{ line.value }}</span>
+                    </span>
+                  }
+                  @if (lines.length < 2) {
+                    <span class="deliv-sub">{{ formatCost(node.data.costLast24hUsd) }} / 24h</span>
+                  }
+                }
+              }
+            </div>
+          }
+
+          @if (edgeHover(); as edge) {
+            <button
+              type="button"
+              class="edge-cut"
+              title="Disconnect"
+              [style.left.px]="edge.midX"
+              [style.top.px]="edge.midY"
+              (mouseenter)="onEdgeEnter(edge)"
+              (mouseleave)="onEdgeLeave()"
+              (click)="detachEdge(edge)"
+            >✕</button>
+          }
+
+          @if (drag(); as d) {
+            <div class="drag-hint" [style.left.px]="d.x2 + 14" [style.top.px]="d.y2 + 14">
+              @if (d.over && !d.allowed) {
+                Already connected
+              } @else if (d.over) {
+                Release to connect “{{ d.resourceName }}”
+              } @else {
+                Drop on an agent
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
+  }
 </div>
+
+@if (pickerOpen()) {
+  <app-resource-type-picker (picked)="onTypePicked($event)" (closed)="pickerOpen.set(false)" />
+}
+
+@if (editorType(); as type) {
+  <app-resource-editor
+    [type]="type"
+    [typeDef]="editorTypeDef()"
+    [resource]="editingResource()"
+    [workflowId]="workflowsStore.selectedId()"
+    (closed)="onResourceEditorClosed($event)"
+  />
+}
+
+@if (workspacesFor(); as pool) {
+  <app-workspaces-modal [pool]="pool" (closed)="workspacesFor.set(null)" />
+}
+
+@if (runScriptFor(); as script) {
+  <app-script-run-modal [script]="script" (closed)="runScriptFor.set(null)" />
+}
+
+@if (agentEditorOpen()) {
+  <app-agent-editor [agent]="editingAgent()" (closed)="onAgentEditorClosed($event)" />
+}
+
+@if (architectOpen()) {
+  <app-architect-modal (closed)="onArchitectClosed()" />
+}

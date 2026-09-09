@@ -15,6 +15,7 @@ namespace Looper.Api.Infrastructure.Execution;
 /// </summary>
 public sealed class ClaudeCliExecutor(
     IOptions<LooperOptions> options,
+    ClaudeAuthProvider claudeAuth,
     ResourceModuleRegistry moduleRegistry,
     GraphContextService graphContext,
     ILogger<ClaudeCliExecutor> logger) : IAgentExecutor
@@ -28,7 +29,7 @@ public sealed class ClaudeCliExecutor(
         var resources = context.Resources;
 
         var (workingDirectory, additionalDirectories) = AgentWorkspace.Resolve(agent, resources);
-        var contributions = await CollectModuleContributions(agent, resources, log);
+        var (contributions, resourceErrors) = await CollectModuleContributions(agent, resources, log);
 
         // Decoupled memory: retrieval happens harness-side, before the model sees anything —
         // the run starts already knowing what the memory layer holds about its task.
@@ -48,10 +49,19 @@ public sealed class ClaudeCliExecutor(
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
             {
-                await log("warn", $"Workspace pool root '{poolConfig.RootPath}' is not usable: {ex.Message}");
+                resourceErrors.Add($"Workspace pool root '{poolConfig.RootPath}' is not usable: {ex.Message}");
             }
         }
         additionalDirectories = additionalDirectories.Concat(poolRoots).Distinct().ToList();
+
+        // Fail closed: a run that starts without a resource it was given would look like a
+        // success while missing its premises. Better an honest failure the user can fix.
+        if (resourceErrors.Count > 0)
+        {
+            var message = "The run was not started because resources failed to apply: " + string.Join(" | ", resourceErrors);
+            await log("error", message);
+            return Failure(Truncate(message, 4000), 0);
+        }
 
         var startInfo = new ProcessStartInfo
         {
@@ -63,7 +73,7 @@ public sealed class ClaudeCliExecutor(
             UseShellExecute = false
         };
 
-        BuildArguments(startInfo.ArgumentList, agent, resources, additionalDirectories, contributions, context.FixInstructions, context.UserResponses, context.TriggerEvents, memoryContext, context.ScriptOutputs);
+        BuildArguments(startInfo.ArgumentList, agent, resources, additionalDirectories, contributions, context.FixInstructions, context.TriggerEvents, memoryContext, context.ScriptOutputs);
 
         foreach (var (key, value) in AgentWorkspace.ResolveEnvironment(resources))
         {
@@ -83,7 +93,20 @@ public sealed class ClaudeCliExecutor(
         startInfo.Environment["LOOPER_RUN_ID"] = context.RunId.ToString();
         startInfo.Environment["LOOPER_AGENT_ID"] = agent.Id.ToString();
 
-        await log("info", $"Launching Claude Agent SDK run: model={agent.Model}, effort={agent.Effort}, cwd={workingDirectory}");
+        // Credentials come from Settings (subscription login or a stored API key), never from
+        // whatever happens to be in the server's environment.
+        string auth;
+        try
+        {
+            auth = await claudeAuth.ApplyAsync(startInfo, cancellationToken);
+        }
+        catch (ClaudeAuthException ex)
+        {
+            await log("error", ex.Message);
+            return Failure(ex.Message, 0);
+        }
+
+        await log("info", $"Launching Claude Agent SDK run: model={agent.Model}, effort={agent.Effort}, auth={auth}, cwd={workingDirectory}");
         await log("info", $"claude {string.Join(' ', RedactedArguments(startInfo.ArgumentList, agent))}");
 
         var stopwatch = Stopwatch.StartNew();
@@ -130,16 +153,20 @@ public sealed class ClaudeCliExecutor(
         return ParseResult(stdout, process.ExitCode, stopwatch.ElapsedMilliseconds, log).Result;
     }
 
-    /// <summary>Asks each dynamic module what its resources add to this run. A faulty module skips, never sinks, the run.</summary>
-    private async Task<IReadOnlyList<ResourceContribution>> CollectModuleContributions(
+    /// <summary>
+    /// Asks each dynamic module what its resources add to this run. A resource that cannot be
+    /// applied is reported as an error — the caller fails the run rather than running without it.
+    /// </summary>
+    private async Task<(IReadOnlyList<ResourceContribution> Contributions, List<string> Errors)> CollectModuleContributions(
         LoopAgent agent, IReadOnlyList<Resource> resources, RunLogWriter log)
     {
         var contributions = new List<ResourceContribution>();
+        var errors = new List<string>();
         foreach (var resource in resources.Where(r => r.Type == ResourceType.Custom && r.CustomTypeKey is not null))
         {
             if (!moduleRegistry.TryGet(resource.CustomTypeKey!, out var module))
             {
-                await log("warn", $"Resource '{resource.Name}' uses unknown type '{resource.CustomTypeKey}'; skipped.");
+                errors.Add($"Resource '{resource.Name}' uses the resource type '{resource.CustomTypeKey}', which is not installed.");
                 continue;
             }
 
@@ -154,20 +181,20 @@ public sealed class ClaudeCliExecutor(
             {
                 logger.LogWarning(ex, "Module {TypeKey} failed to contribute for resource {Resource}",
                     resource.CustomTypeKey, resource.Name);
-                await log("warn", $"Resource '{resource.Name}' ({resource.CustomTypeKey}) failed to apply: {ex.Message}. Skipped.");
+                errors.Add($"Resource '{resource.Name}' ({resource.CustomTypeKey}) failed to apply: {ex.Message}");
             }
         }
 
-        return contributions;
+        return (contributions, errors);
     }
 
     private void BuildArguments(ICollection<string> args, LoopAgent agent, IReadOnlyList<Resource> resources,
         IReadOnlyList<string> additionalDirectories, IReadOnlyList<ResourceContribution> contributions,
-        string? fixInstructions, string? userResponses = null, string? triggerEvents = null,
+        string? fixInstructions, string? triggerEvents = null,
         IReadOnlyList<string>? memoryContext = null, string? scriptOutputs = null)
     {
         args.Add("-p");
-        args.Add(BuildPrompt(agent, resources, contributions, fixInstructions, userResponses, triggerEvents, memoryContext, scriptOutputs));
+        args.Add(BuildPrompt(agent, resources, contributions, fixInstructions, triggerEvents, memoryContext, scriptOutputs));
         args.Add("--output-format");
         args.Add("json");
         args.Add("--model");
@@ -225,7 +252,7 @@ public sealed class ClaudeCliExecutor(
 
     internal static string BuildPrompt(LoopAgent agent, IReadOnlyList<Resource> resources,
         IReadOnlyList<ResourceContribution> contributions, string? fixInstructions = null,
-        string? userResponses = null, string? triggerEvents = null,
+        string? triggerEvents = null,
         IReadOnlyList<string>? memoryContext = null, string? scriptOutputs = null)
     {
         var ragSections = resources
@@ -260,13 +287,6 @@ public sealed class ClaudeCliExecutor(
                 "TRIGGERING EVENT(S) — this iteration was started by the following event(s); they are the reason you are running, so address them directly:\n"
                 + triggerEvents);
         }
-        if (!string.IsNullOrWhiteSpace(userResponses))
-        {
-            extraSections.Insert(0,
-                "USER RESPONSES — the user has answered your earlier action request(s). Read these first and act on them:\n"
-                + userResponses);
-        }
-
         if (!string.IsNullOrWhiteSpace(fixInstructions))
         {
             extraSections.Add(
@@ -303,12 +323,12 @@ public sealed class ClaudeCliExecutor(
 
     /// <summary>Standing instructions for reporting shipped work and handing off — always present on real runs.</summary>
     private const string DeliveryProtocol =
-        "Delivery reporting: when you open a pull request during this run, register it with Looper immediately: " +
+        "Delivery reporting: when you open a pull request — or finish any other deliverable that has a link — register it with Looper immediately: " +
         "curl -s -X POST \"$LOOPER_API_URL/api/delivery/prs\" -H 'Content-Type: application/json' " +
-        "-d \"{\\\"runId\\\":\\\"$LOOPER_RUN_ID\\\",\\\"url\\\":\\\"<the PR url>\\\",\\\"title\\\":\\\"<the PR title>\\\",\\\"repoPath\\\":\\\"$PWD\\\"}\". " +
+        "-d \"{\\\"runId\\\":\\\"$LOOPER_RUN_ID\\\",\\\"url\\\":\\\"<link to the deliverable>\\\",\\\"title\\\":\\\"<what it is>\\\",\\\"repoPath\\\":\\\"$PWD\\\"}\". " +
         "If you are blocked on something only a human can decide or authorize, register an escalation and stop cleanly: " +
         "curl -s -X POST \"$LOOPER_API_URL/api/runs/$LOOPER_RUN_ID/escalate\" -H 'Content-Type: application/json' " +
-        "-d \"{\\\"reason\\\":\\\"<one sentence on what you need>\\\"}\". Never invent a PR url; only report PRs you actually opened. " +
+        "-d \"{\\\"reason\\\":\\\"<one sentence on what you need>\\\"}\". Never invent a link; only register work you actually finished. " +
         "You may also raise a named event on Looper's event bus to signal other loops (topics are dotted lowercase keys, e.g. docs.updated): " +
         "curl -s -X POST \"$LOOPER_API_URL/api/events\" -H 'Content-Type: application/json' " +
         "-d \"{\\\"runId\\\":\\\"$LOOPER_RUN_ID\\\",\\\"topic\\\":\\\"<topic>\\\",\\\"payload\\\":\\\"<what happened>\\\"}\". " +
@@ -342,7 +362,11 @@ public sealed class ClaudeCliExecutor(
         "curl -s -X POST \"$LOOPER_API_URL/api/user-actions\" -H 'Content-Type: application/json' " +
         "-d \"{\\\"runId\\\":\\\"$LOOPER_RUN_ID\\\",\\\"title\\\":\\\"<one-line ask>\\\",\\\"details\\\":\\\"<exactly what you need and why, with the options if it is a decision>\\\"}\". " +
         "Then finish the iteration cleanly, summarising what you completed and what waits on the user. Raising a request is NOT " +
-        "a failure — your loop simply pauses until the user responds, and their answer arrives in your next iteration." +
+        "a failure — your loop simply pauses until the user completes it. You start every iteration from a clean context: the " +
+        "user's answer is never handed to you as a message. It is recorded into your resources — as a standing rule in your " +
+        "system prompt, or in your memory graph's inbox — so check your rules (and memory, if you have one) before raising the " +
+        "same request again. If the user completed the action without recording anything, verify the state yourself and " +
+        "continue; if it was not done correctly, raise a new request stating exactly what is still missing." +
         (string.IsNullOrWhiteSpace(config.Instructions) ? "" : " Guidance from the user on when to raise: " + config.Instructions);
 
     /// <summary>Standing rules from Rule resources, enabled Rule Set entries, and module contributions, in resource order.</summary>
@@ -452,47 +476,81 @@ public sealed class ClaudeCliExecutor(
             return Failure(message, elapsedMs);
         }
 
+        var outcome = InterpretResult(document.RootElement, exitCode, elapsedMs);
+        if (!outcome.Success)
         {
-            var root = document.RootElement;
-
-            var isError = (root.TryGetProperty("is_error", out var isErrorProp) && isErrorProp.ValueKind == JsonValueKind.True)
-                          || exitCode != 0;
-            var resultText = root.TryGetProperty("result", out var resultProp) ? resultProp.GetString() : null;
-            var costUsd = root.TryGetProperty("total_cost_usd", out var costProp) ? costProp.GetDecimal() : 0m;
-            var numTurns = root.TryGetProperty("num_turns", out var turnsProp) ? turnsProp.GetInt32() : 0;
-            var durationMs = root.TryGetProperty("duration_ms", out var durationProp) ? durationProp.GetInt64() : elapsedMs;
-
-            long inputTokens = 0, outputTokens = 0, cacheRead = 0, cacheCreation = 0;
-            if (root.TryGetProperty("usage", out var usage) && usage.ValueKind == JsonValueKind.Object)
-            {
-                inputTokens = GetLong(usage, "input_tokens");
-                outputTokens = GetLong(usage, "output_tokens");
-                cacheRead = GetLong(usage, "cache_read_input_tokens");
-                cacheCreation = GetLong(usage, "cache_creation_input_tokens");
-            }
-
-            if (isError)
-            {
-                var message = string.IsNullOrWhiteSpace(resultText) ? $"Run failed (exit code {exitCode})." : resultText;
-                await log("error", Truncate(message!, 4000));
-            }
-            else
-            {
-                await log("info", $"Run completed: {numTurns} turns, ${costUsd:F4}, {inputTokens + cacheRead:N0} in / {outputTokens:N0} out tokens");
-            }
-
-            return new AgentExecutionOutcome(
-                Success: !isError,
-                ResultText: resultText,
-                ErrorMessage: isError ? Truncate(resultText ?? $"Exit code {exitCode}", 4000) : null,
-                CostUsd: costUsd,
-                InputTokens: inputTokens,
-                OutputTokens: outputTokens,
-                CacheReadTokens: cacheRead,
-                CacheCreationTokens: cacheCreation,
-                NumTurns: numTurns,
-                DurationMs: durationMs);
+            await log("error", outcome.ErrorMessage!);
         }
+        else
+        {
+            await log("info", $"Run completed: {outcome.NumTurns} turns, ${outcome.CostUsd:F4}, " +
+                              $"{outcome.InputTokens + outcome.CacheReadTokens:N0} in / {outcome.OutputTokens:N0} out tokens");
+        }
+        return outcome;
+    }
+
+    /// <summary>
+    /// Reads the CLI's result object into an outcome, failing closed on every way a run can end
+    /// without having done the work: a non-zero exit, an is_error flag, an error subtype (the
+    /// turn or budget cap was hit before the task finished), or no result text at all.
+    /// </summary>
+    internal static AgentExecutionOutcome InterpretResult(JsonElement root, int exitCode, long elapsedMs)
+    {
+        var isErrorFlag = root.TryGetProperty("is_error", out var isErrorProp) && isErrorProp.ValueKind == JsonValueKind.True;
+        var subtype = root.TryGetProperty("subtype", out var subtypeProp) && subtypeProp.ValueKind == JsonValueKind.String
+            ? subtypeProp.GetString() ?? ""
+            : "";
+        var resultText = root.TryGetProperty("result", out var resultProp) && resultProp.ValueKind == JsonValueKind.String
+            ? resultProp.GetString()
+            : null;
+        var costUsd = root.TryGetProperty("total_cost_usd", out var costProp) && costProp.ValueKind == JsonValueKind.Number ? costProp.GetDecimal() : 0m;
+        var numTurns = root.TryGetProperty("num_turns", out var turnsProp) && turnsProp.ValueKind == JsonValueKind.Number ? turnsProp.GetInt32() : 0;
+        var durationMs = root.TryGetProperty("duration_ms", out var durationProp) && durationProp.ValueKind == JsonValueKind.Number ? durationProp.GetInt64() : elapsedMs;
+
+        long inputTokens = 0, outputTokens = 0, cacheRead = 0, cacheCreation = 0;
+        if (root.TryGetProperty("usage", out var usage) && usage.ValueKind == JsonValueKind.Object)
+        {
+            inputTokens = GetLong(usage, "input_tokens");
+            outputTokens = GetLong(usage, "output_tokens");
+            cacheRead = GetLong(usage, "cache_read_input_tokens");
+            cacheCreation = GetLong(usage, "cache_creation_input_tokens");
+        }
+
+        var lastMessage = string.IsNullOrWhiteSpace(resultText) ? "" : $" Last message: {Truncate(resultText.Trim(), 2000)}";
+        string? failure = null;
+        if (exitCode != 0)
+        {
+            failure = string.IsNullOrWhiteSpace(resultText) ? $"Run failed (exit code {exitCode})." : resultText.Trim();
+        }
+        else if (isErrorFlag)
+        {
+            failure = string.IsNullOrWhiteSpace(resultText) ? "Run failed: the CLI reported an error without a message." : resultText.Trim();
+        }
+        else if (subtype.StartsWith("error", StringComparison.OrdinalIgnoreCase))
+        {
+            failure = subtype switch
+            {
+                "error_max_turns" => $"Stopped at the turn limit after {numTurns} turns before finishing the task — raise max turns or narrow the prompt.",
+                "error_max_budget_usd" or "error_max_budget" => "Stopped at the budget cap before finishing the task.",
+                _ => $"The CLI ended with '{subtype}' instead of a result."
+            } + lastMessage;
+        }
+        else if (string.IsNullOrWhiteSpace(resultText))
+        {
+            failure = "The run ended without reporting anything — treated as a failure, never as a silent success.";
+        }
+
+        return new AgentExecutionOutcome(
+            Success: failure is null,
+            ResultText: resultText,
+            ErrorMessage: failure is null ? null : Truncate(failure, 4000),
+            CostUsd: costUsd,
+            InputTokens: inputTokens,
+            OutputTokens: outputTokens,
+            CacheReadTokens: cacheRead,
+            CacheCreationTokens: cacheCreation,
+            NumTurns: numTurns,
+            DurationMs: durationMs);
     }
 
     private static readonly string[] ResultMarkerKeys = ["result", "total_cost_usd", "is_error", "usage", "num_turns"];

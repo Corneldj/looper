@@ -1,0 +1,90 @@
+.metric-modal {
+  max-width: 760px;
+}
+
+.modal-sub {
+  font-size: 12.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+
+  .meta { color: var(--text-3); }
+}
+
+.add-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .value-input { flex: 0 0 140px; }
+  .unit { font-size: 12.5px; color: var(--text-3); white-space: nowrap; }
+  .note-input { flex: 1; min-width: 0; }
+  .btn { flex: none; }
+}
+
+.modal-error {
+  color: var(--red);
+  background: var(--red-soft);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 12.5px;
+  white-space: pre-wrap;
+}
+
+.loading-note {
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.values {
+  max-height: 46vh;
+  overflow: auto;
+}
+
+table.data {
+  th.r,
+  td.r { text-align: right; }
+}
+
+.when {
+  font-size: 12.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+.strong { font-weight: 700; }
+
+.note {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.by { white-space: nowrap; }
+
+.howto {
+  summary {
+    cursor: pointer;
+    color: var(--text-2);
+    font-size: 13px;
+  }
+
+  .howto-text {
+    font-size: 12.5px;
+    color: var(--text-3);
+    margin: 10px 0 6px;
+  }
+
+  pre {
+    margin: 0;
+    padding: 10px 12px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 11.5px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+}

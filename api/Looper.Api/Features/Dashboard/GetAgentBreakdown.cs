@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Looper.Api.Features.Dashboard;
 
-public sealed record GetAgentBreakdownQuery(int Days) : IQuery<IReadOnlyList<AgentBreakdownDto>>;
+public sealed record GetAgentBreakdownQuery(int Days, Guid? WorkflowId = null) : IQuery<IReadOnlyList<AgentBreakdownDto>>;
 
 public sealed class GetAgentBreakdownHandler(LooperDbContext db)
     : IQueryHandler<GetAgentBreakdownQuery, IReadOnlyList<AgentBreakdownDto>>
@@ -15,13 +15,16 @@ public sealed class GetAgentBreakdownHandler(LooperDbContext db)
     {
         var (_, fromUtc, toUtc) = DashboardWindow.Resolve(query.Days);
 
+        var workflowId = query.WorkflowId;
         var agents = await db.Agents
+            .Where(a => workflowId == null || a.WorkflowId == workflowId)
             .Select(a => new { a.Id, a.Name, a.Model, a.Enabled })
             .ToListAsync(cancellationToken);
 
         // SQLite cannot aggregate decimals server-side, so fetch a projection and aggregate in memory.
         var runs = await db.Runs
             .Where(r => r.StartedAtUtc >= fromUtc && r.StartedAtUtc < toUtc)
+            .Where(r => workflowId == null || r.Agent!.WorkflowId == workflowId)
             .Select(r => new { r.AgentId, r.Status, r.CostUsd, r.DurationMs })
             .ToListAsync(cancellationToken);
 
@@ -55,6 +58,6 @@ public sealed class GetAgentBreakdownHandler(LooperDbContext db)
 public sealed class GetAgentBreakdownEndpoint : IEndpoint
 {
     public void Map(IEndpointRouteBuilder app) =>
-        app.MapGet("/api/dashboard/agent-breakdown", (int? days, IDispatcher dispatcher, CancellationToken ct) =>
-            dispatcher.Query(new GetAgentBreakdownQuery(days ?? 14), ct));
+        app.MapGet("/api/dashboard/agent-breakdown", (int? days, Guid? workflowId, IDispatcher dispatcher, CancellationToken ct) =>
+            dispatcher.Query(new GetAgentBreakdownQuery(days ?? 14, workflowId), ct));
 }

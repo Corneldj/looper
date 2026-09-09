@@ -1,0 +1,222 @@
+<div class="modal-backdrop">
+  <div class="modal agent-editor-modal">
+    <div class="modal-header">
+      <div>
+        <h2>{{ agent() ? 'Edit agent' : 'New loop agent' }}</h2>
+        <p class="modal-subtitle">
+          {{ agent() ? 'Adjust how this loop behaves on its next iteration.' : 'Define a loop that wakes on a schedule — or on events — and works its prompt.' }}
+        </p>
+      </div>
+      <button type="button" class="icon-btn" title="Close" (click)="cancel()">✕</button>
+    </div>
+
+    <section class="editor-section">
+      <span class="section-label">Behaviour</span>
+
+      <div class="field">
+        <label for="agent-name">Name</label>
+        <input id="agent-name" class="input" [(ngModel)]="form.name" placeholder="e.g. Nightly refactorer" />
+      </div>
+
+      <div class="field">
+        <label for="agent-description">Description</label>
+        <input id="agent-description" class="input" [(ngModel)]="form.description" placeholder="What this loop looks after" />
+      </div>
+
+      <div class="field">
+        <label for="agent-prompt">Loop prompt</label>
+        <textarea id="agent-prompt" class="textarea prompt-area" [(ngModel)]="form.prompt"
+                  placeholder="What should the agent do each time it wakes?"></textarea>
+        <span class="hint">Executed on every iteration.</span>
+      </div>
+
+      <div class="form-row">
+        <div class="field">
+          <label for="agent-model">Model</label>
+          <select id="agent-model" class="select" [(ngModel)]="form.model">
+            @for (model of models; track model.id) {
+              <option [value]="model.id">{{ model.label }} — {{ model.note }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label for="agent-effort">Effort</label>
+          <select id="agent-effort" class="select" [(ngModel)]="form.effort">
+            @for (level of effortLevels; track level.id) {
+              <option [value]="level.id">{{ level.label }}</option>
+            }
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <section class="editor-section">
+      <span class="section-label">Loop</span>
+
+      <div class="field">
+        <label>Starts</label>
+        <div class="trigger-modes">
+          <label class="trigger-option" [class.selected]="form.triggerMode === 'Scheduled'">
+            <input type="radio" name="trigger-mode" [checked]="form.triggerMode === 'Scheduled'"
+                   (change)="form.triggerMode = 'Scheduled'" />
+            <span class="trigger-title">⏱ On a schedule</span>
+            <span class="hint">Fires every N minutes — an attached Event Listener can wake it early too.</span>
+          </label>
+          <label class="trigger-option" [class.selected]="form.triggerMode === 'Event'">
+            <input type="radio" name="trigger-mode" [checked]="form.triggerMode === 'Event'"
+                   (change)="form.triggerMode = 'Event'" />
+            <span class="trigger-title">⚡ On events</span>
+            <span class="hint">Fires only when a matching event is raised — no schedule.</span>
+          </label>
+        </div>
+      </div>
+
+      @if (form.triggerMode === 'Event') {
+        <div class="field">
+          <label>Listens for</label>
+          <app-event-picker
+            [value]="form.triggerTopics"
+            [multiple]="true"
+            [allowPatterns]="true"
+            (valueChange)="form.triggerTopics = $event"
+          />
+          <span class="hint">Pick the events that wake this loop, or create one. Event Listener resources attached below wake it too — wiring them on the workbench shows the chain on the canvas.</span>
+        </div>
+      } @else {
+      <div class="form-row">
+        <div class="field">
+          <label for="agent-interval">Interval (minutes)</label>
+          <input id="agent-interval" class="input num" type="number" min="1" [(ngModel)]="form.intervalMinutes" />
+          <div class="interval-presets">
+            @for (preset of intervalPresets; track preset.minutes) {
+              <button type="button" class="btn btn-ghost btn-sm"
+                      [class.active]="form.intervalMinutes === preset.minutes"
+                      (click)="setIntervalPreset(preset.minutes)">{{ preset.label }}</button>
+            }
+          </div>
+        </div>
+        <div class="field">
+          <label for="agent-max-turns">Max turns</label>
+          <input id="agent-max-turns" class="input num" type="number" min="1" [(ngModel)]="form.maxTurns" />
+        </div>
+      </div>
+      }
+      @if (form.triggerMode === 'Event') {
+        <div class="field">
+          <label for="agent-max-turns-e">Max turns</label>
+          <input id="agent-max-turns-e" class="input num" type="number" min="1" [(ngModel)]="form.maxTurns" />
+        </div>
+      }
+    </section>
+
+    <section class="editor-section">
+      <span class="section-label">Limits</span>
+
+      <div class="form-row">
+        <div class="field">
+          <label for="agent-budget">Max budget per run (USD)</label>
+          <input id="agent-budget" class="input num" type="number" min="0" step="0.01"
+                 [(ngModel)]="form.maxBudgetUsd" placeholder="uncapped" />
+        </div>
+        <div class="field">
+          <label for="agent-workdir">Working directory</label>
+          <div class="path-with-browse">
+            <input id="agent-workdir" class="input mono" [(ngModel)]="form.workingDirectory" placeholder="optional" />
+            <button type="button" class="btn btn-ghost btn-sm" (click)="openFolderPicker()">Browse…</button>
+          </div>
+          <span class="hint">Defaults to the primary folder resource.</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="agent-tools">Allowed tools</label>
+        <input id="agent-tools" class="input mono" [(ngModel)]="form.allowedTools" placeholder="optional" />
+        <span class="hint">e.g. Read,Edit,Bash(git *)</span>
+      </div>
+
+      <div class="field">
+        <label for="agent-autonomy">Autonomy level</label>
+        <select id="agent-autonomy" class="select" [(ngModel)]="form.autonomyLevel">
+          @for (level of autonomyLevels; track level.level) {
+            <option [ngValue]="level.level">{{ level.label }} — {{ level.blurb }}</option>
+          }
+        </select>
+        <span class="hint">Promote on first-pass and escalation evidence — the dashboard’s Delivery section recommends moves.</span>
+      </div>
+
+      <div class="switch-rows">
+        <label class="switch-row">
+          <span class="switch">
+            <input type="checkbox" [(ngModel)]="form.bypassPermissions" />
+            <span class="track"></span>
+          </span>
+          <span class="switch-text">
+            <span class="switch-title">Full autonomy</span>
+            <span class="hint">Run without permission prompts.</span>
+          </span>
+        </label>
+        <label class="switch-row">
+          <span class="switch">
+            <input type="checkbox" [(ngModel)]="form.dryRun" />
+            <span class="track"></span>
+          </span>
+          <span class="switch-text">
+            <span class="switch-title">Dry run</span>
+            <span class="hint">Simulate iterations — no tokens spent.</span>
+          </span>
+        </label>
+      </div>
+    </section>
+
+    <section class="editor-section">
+      <div class="resources-head">
+        <span class="section-label">Resources</span>
+        @if (selectedIds().size > 0) {
+          <span class="chip chip-accent">{{ selectedIds().size }} selected</span>
+        }
+      </div>
+
+      @if (!resourcesStore.loaded()) {
+        <p class="resources-note">Loading resources…</p>
+      } @else if (resourcesStore.resources().length === 0) {
+        <p class="resources-note link-text">Create resources in the left panel first.</p>
+      } @else {
+        <div class="resource-groups">
+          @for (group of resourceGroups(); track group.meta.type) {
+            <div class="resource-group">
+              <div class="group-head">
+                <span class="group-icon">{{ group.meta.icon }}</span>{{ group.meta.label }}
+              </div>
+              @for (resource of group.items; track resource.id) {
+                <label class="resource-option" [class.selected]="isSelected(resource.id)">
+                  <input type="checkbox" [checked]="isSelected(resource.id)" (change)="toggleResource(resource.id)" />
+                  <span class="resource-icon">{{ group.meta.icon }}</span>
+                  <span class="resource-text">
+                    <span class="resource-name">{{ resource.name }}</span>
+                    @if (resource.description) {
+                      <span class="resource-desc">{{ resource.description }}</span>
+                    }
+                  </span>
+                </label>
+              }
+            </div>
+          }
+        </div>
+      }
+    </section>
+
+    <div class="modal-footer">
+      @if (error()) {
+        <span class="save-error">{{ error() }}</span>
+      }
+      <button type="button" class="btn btn-ghost" [disabled]="saving()" (click)="cancel()">Cancel</button>
+      <button type="button" class="btn btn-primary" [disabled]="!canSave || saving()" (click)="save()">
+        {{ saving() ? 'Saving…' : agent() ? 'Save changes' : 'Create agent' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+@if (folderPickerOpen()) {
+  <app-folder-picker [startPath]="form.workingDirectory || null" (picked)="onFolderPicked($event)" />
+}

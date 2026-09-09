@@ -7,11 +7,8 @@ export const routes: Routes = [
     loadComponent: () => import('./features/workbench/workbench').then(m => m.Workbench),
     title: 'Looper — Workbench',
   },
-  {
-    path: 'map',
-    loadComponent: () => import('./features/architecture-map/architecture-map').then(m => m.ArchitectureMap),
-    title: 'Looper — Map',
-  },
+  // The map and the workbench are one page now; old links keep working.
+  { path: 'map', redirectTo: 'workbench' },
   {
     path: 'dashboard',
     loadComponent: () => import('./features/dashboard/dashboard').then(m => m.Dashboard),

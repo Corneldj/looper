@@ -42,7 +42,6 @@
 .nav {
   display: flex;
   gap: 6px;
-  flex: 1;
 
   a {
     padding: 7px 14px;
@@ -57,7 +56,15 @@
   }
 }
 
-.topbar-status { display: flex; align-items: center; }
+.topbar-status { display: flex; align-items: center; gap: 8px; }
+
+.settings-btn {
+  width: 34px;
+  height: 34px;
+  color: var(--text-2);
+
+  .icon { display: block; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+}
 
 /* Claude Code missing — slim setup banner under the topbar */
 .claude-banner {

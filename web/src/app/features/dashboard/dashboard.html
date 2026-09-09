@@ -2,8 +2,15 @@
   <header class="page-header">
     <div>
       <h1>Dashboard</h1>
-      <p class="subtitle">What your loops cost and deliver.</p>
+      <p class="subtitle">What your loops cost — and the outcomes they move.</p>
     </div>
+    <div class="header-controls">
+      <select class="select workflow-filter" [ngModel]="workflowFilter() ?? ''" (ngModelChange)="setWorkflow($event)" title="Filter by workflow">
+        <option value="">All workflows</option>
+        @for (w of workflowsStore.workflows(); track w.id) {
+          <option [value]="w.id">{{ w.name }}</option>
+        }
+      </select>
     <div class="segmented" role="group" aria-label="Period">
       @for (p of periods; track p) {
         <button
@@ -15,6 +22,7 @@
           {{ p }}d
         </button>
       }
+    </div>
     </div>
   </header>
 
@@ -75,6 +83,9 @@
       <div class="kpi-delta"><span class="vs">enabled of configured</span></div>
     </div>
   </section>
+
+  <!-- Your metrics — the outcomes you defined, discoverable the moment one exists -->
+  <app-metrics-section [days]="days()" [workflowId]="workflowFilter()" />
 
   <!-- Spend over time -->
   <section class="card block" [class.dim]="refreshing()">
@@ -155,7 +166,7 @@
   </section>
 
   <!-- Delivery — the five metrics that measure value that stuck -->
-  <app-delivery-section [days]="days()" />
+  <app-delivery-section [days]="days()" [workflowId]="workflowFilter()" />
 
   <!-- Agent breakdown table — the accessible view behind the charts -->
   <section class="card block" [class.dim]="refreshing()">

@@ -1,13 +1,23 @@
-<section class="delivery">
+<section class="delivery" [class.is-folded]="folded()">
   <header class="delivery-head">
     <div>
-      <span class="section-label">Delivery — value that stuck</span>
+      <span class="section-label">Pull-request delivery — value that stuck</span>
       <p class="head-sub">
-        Output volume is meaningless; these five measure whether agent work ships and lasts.
+        One built-in outcome for coding loops: whether agent work ships and lasts, in five numbers.
+        @if (folded()) {
+          Idle — no pull requests in this period; it switches on when an agent registers one.
+        }
       </p>
     </div>
-    <button type="button" class="btn btn-soft btn-sm" (click)="logPrOpen.set(true)">Log PR</button>
+    <div class="head-actions">
+      <button type="button" class="btn btn-ghost btn-sm fold-toggle" (click)="toggleFold()">{{ folded() ? 'Show' : 'Hide' }}</button>
+      @if (!folded()) {
+        <button type="button" class="btn btn-soft btn-sm" (click)="logPrOpen.set(true)">Log PR</button>
+      }
+    </div>
   </header>
+
+  @if (!folded()) {
 
   @if (apiError()) {
     <div class="stale-note">
@@ -272,6 +282,7 @@
       </div>
     }
   </div>
+  }
 </section>
 
 @if (logPrOpen()) {

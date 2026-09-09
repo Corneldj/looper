@@ -1,0 +1,32 @@
+.workflow-modal {
+  max-width: 520px;
+}
+
+.editor-blurb {
+  color: var(--text-3);
+  font-size: 12.5px;
+  margin-top: -10px;
+}
+
+.editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.optional {
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.save-error {
+  font-size: 12.5px;
+  color: var(--red);
+  background: var(--red-soft);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+}
+
+.modal-footer .spacer {
+  flex: 1;
+}

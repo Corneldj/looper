@@ -1,0 +1,199 @@
+/* Layout & composition only — visuals come from the shared design system. */
+
+:host {
+  display: block;
+  margin: 4px 0 20px;
+}
+
+.metrics-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 14px;
+  padding-top: 6px;
+}
+
+.head-sub {
+  color: var(--text-3);
+  font-size: 12.5px;
+  margin-top: 3px;
+  max-width: 70ch;
+}
+
+.stale-note {
+  margin: 0 0 16px;
+  padding: 9px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--amber);
+  background: var(--amber-soft);
+  border-radius: var(--radius-sm);
+}
+
+.loading-hint {
+  padding: 28px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.metrics-empty {
+  padding: 40px 24px;
+
+  .btn { margin-top: 16px; }
+}
+
+/* ---------- cards ---------- */
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+  gap: 16px;
+}
+
+.metric-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 20px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.metric-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.metric-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agg {
+  flex: none;
+  font-size: 10.5px;
+  padding: 1px 8px;
+}
+
+.metric-reading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+}
+
+.metric-value {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &.dim { color: var(--text-3); font-weight: 600; }
+}
+
+.metric-unit {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0;
+  margin: 0 2px;
+}
+
+.spark {
+  flex: none;
+  width: 96px;
+  height: 32px;
+
+  polyline {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.8;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+  }
+}
+
+.metric-trend {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 16px;
+  font-size: 12px;
+}
+
+.trend {
+  font-weight: 700;
+
+  &.good { color: var(--green); }
+  &.bad { color: var(--red); }
+  &.flat { color: var(--text-3); font-weight: 600; }
+}
+
+.vs { color: var(--text-3); }
+
+/* ---------- target ---------- */
+
+.target {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.target-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.target-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+
+  &.warn { background: var(--amber); }
+  &.good { background: var(--green); }
+}
+
+.target-text {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* ---------- footer ---------- */
+
+.metric-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.foot-text {
+  font-size: 11.5px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

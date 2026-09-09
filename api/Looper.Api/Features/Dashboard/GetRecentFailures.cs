@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Looper.Api.Features.Dashboard;
 
-public sealed record GetRecentFailuresQuery(int Take) : IQuery<IReadOnlyList<RecentFailureDto>>;
+public sealed record GetRecentFailuresQuery(int Take, Guid? WorkflowId = null) : IQuery<IReadOnlyList<RecentFailureDto>>;
 
 public sealed class GetRecentFailuresHandler(LooperDbContext db)
     : IQueryHandler<GetRecentFailuresQuery, IReadOnlyList<RecentFailureDto>>
@@ -17,8 +17,10 @@ public sealed class GetRecentFailuresHandler(LooperDbContext db)
     {
         var take = Math.Clamp(query.Take, 1, 50);
 
+        var workflowId = query.WorkflowId;
         var failures = await db.Runs
             .Where(r => r.Status == RunStatus.Failed || r.Status == RunStatus.TimedOut)
+            .Where(r => workflowId == null || r.Agent!.WorkflowId == workflowId)
             .OrderByDescending(r => r.StartedAtUtc)
             .Take(take)
             .Select(r => new { r.Id, r.AgentId, AgentName = r.Agent!.Name, r.StartedAtUtc, r.Status, r.ErrorMessage })
@@ -41,6 +43,6 @@ public sealed class GetRecentFailuresHandler(LooperDbContext db)
 public sealed class GetRecentFailuresEndpoint : IEndpoint
 {
     public void Map(IEndpointRouteBuilder app) =>
-        app.MapGet("/api/dashboard/recent-failures", (int? take, IDispatcher dispatcher, CancellationToken ct) =>
-            dispatcher.Query(new GetRecentFailuresQuery(take ?? 8), ct));
+        app.MapGet("/api/dashboard/recent-failures", (int? take, Guid? workflowId, IDispatcher dispatcher, CancellationToken ct) =>
+            dispatcher.Query(new GetRecentFailuresQuery(take ?? 8, workflowId), ct));
 }

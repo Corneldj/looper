@@ -11,7 +11,7 @@ namespace Looper.Api.Features.Delivery;
 /// plausible work, so these measure value that stuck. Dry-run (simulated) runs are excluded
 /// throughout: pretend spend must not flatter or damn real conversion.
 /// </summary>
-public sealed record GetDeliveryMetricsQuery(int Days) : IQuery<DeliveryMetricsDto>;
+public sealed record GetDeliveryMetricsQuery(int Days, Guid? WorkflowId = null) : IQuery<DeliveryMetricsDto>;
 
 public sealed class GetDeliveryMetricsHandler(LooperDbContext db)
     : IQueryHandler<GetDeliveryMetricsQuery, DeliveryMetricsDto>
@@ -22,8 +22,10 @@ public sealed class GetDeliveryMetricsHandler(LooperDbContext db)
         var since = DateTime.UtcNow.AddDays(-days);
 
         // Real (non-dry) completed runs in the window: the spend and escalation base.
+        var workflowId = query.WorkflowId;
         var runs = await db.Runs.AsNoTracking()
             .Where(r => r.StartedAtUtc >= since && !r.DryRun && r.Status != RunStatus.Running)
+            .Where(r => workflowId == null || r.Agent!.WorkflowId == workflowId)
             .Select(r => new { r.AgentId, r.CostUsd, r.Escalated })
             .ToListAsync(cancellationToken);
 
@@ -31,6 +33,7 @@ public sealed class GetDeliveryMetricsHandler(LooperDbContext db)
             .Where(pr => pr.OpenedAtUtc >= since
                 || (pr.MergedAtUtc != null && pr.MergedAtUtc >= since)
                 || pr.Status == PrStatus.Open)
+            .Where(pr => workflowId == null || pr.Agent.WorkflowId == workflowId)
             .ToListAsync(cancellationToken);
 
         var mergedInWindow = prs.Where(pr => pr.Status == PrStatus.Merged && pr.MergedAtUtc >= since).ToList();
@@ -149,6 +152,6 @@ public sealed class GetDeliveryMetricsHandler(LooperDbContext db)
 public sealed class GetDeliveryMetricsEndpoint : IEndpoint
 {
     public void Map(IEndpointRouteBuilder app) =>
-        app.MapGet("/api/delivery/metrics", (int? days, IDispatcher dispatcher, CancellationToken ct) =>
-            dispatcher.Query(new GetDeliveryMetricsQuery(days ?? 30), ct));
+        app.MapGet("/api/delivery/metrics", (int? days, Guid? workflowId, IDispatcher dispatcher, CancellationToken ct) =>
+            dispatcher.Query(new GetDeliveryMetricsQuery(days ?? 30, workflowId), ct));
 }
