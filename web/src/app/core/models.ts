@@ -259,6 +259,11 @@ export const METRIC_AGGREGATIONS: { id: MetricAggregation; label: string; blurb:
 
 // ---------- Claude CLI status ----------
 
+export interface VersionDto {
+  name: string;
+  version: string;
+}
+
 export interface ClaudeStatusDto {
   available: boolean;
   version: string | null;
@@ -667,7 +672,7 @@ export interface MapAgentDto {
   metrics: MapMetricDto[];
   /** Topics this agent raises: its completion topics plus attached Event Raisers. */
   raises: string[];
-  /** Patterns that wake this agent: its own topics (Event mode) plus attached Event Listeners. */
+  /** Patterns that wake this agent: its own topics, when it runs on events. */
   listens: string[];
 }
 

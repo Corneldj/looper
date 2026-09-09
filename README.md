@@ -2,9 +2,9 @@
 
 **Loop engineering for Claude agents — for any profession.** Define reusable resources — folders, rules, checks, scripts, metrics, credentials, MCP servers — wire them into agents that run on a schedule or on events through the [Claude Agent SDK](https://code.claude.com), and watch cost, reliability and the outcomes you care about on a live dashboard. A marketing loop that drafts and measures a newsletter, a support loop that triages tickets, a research loop that keeps a briefing current, an engineering loop that ships pull requests: same tool, same guarantees. Nothing assumes code; the pull-request delivery metrics are one built-in outcome family for coding loops, folded away until a PR exists.
 
-![Looper walkthrough](docs/demo.gif)
+![The workbench: resources flow into agents, agents into outcomes](docs/tour-01-workbench.png)
 
-<p align="center"><em>60-second tour: create a resource, wire it into a scheduled agent, run a loop, inspect its logs and cost, and check the dashboard.&nbsp;&nbsp;(<a href="docs/looper-walkthrough.mp4">full-resolution video</a>)</em></p>
+<p align="center"><em>A marketing workflow on the workbench: scripts, a specification, a metric, a check and a memory graph feed three loops — one on a schedule, two woken by events.</em></p>
 
 ## Highlights
 
@@ -27,9 +27,9 @@
 - **Metrics you define** — pull requests are only one kind of result. A **Metric** resource names any outcome a loop is meant to move (campaign sign-ups, conversion rate, ticket resolution time, revenue, defect count), says how values combine (a gauge, a running total, an average) and which way is good, and optionally sets a target. Attach it to the agents that affect it and they get a reporting protocol; a Script resource reports by printing `@metric name=value`; you can add values by hand. Every metric appears on the dashboard the moment it exists — current reading, direction-aware trend against the previous period, target progress, a sparkline, and every measurement with who reported it and why. The workbench's third column shows each agent's outcomes. The Architect creates metrics for the outcome a workflow is meant to move.
 - **Delivery metrics that measure value that stuck** (the built-in outcome family for coding loops; folded away on the dashboard until a pull request exists) — output volume is meaningless when agents can generate unlimited plausible work, so Looper tracks the five that survived: **cost per merged PR** (does spend convert into shipped work?), **first-pass success rate** (or are humans quietly fixing everything?), **code survival rate** (measured by `git blame` after a 14-day window — does agent output last?), **review churn per unit of change** (did "faster to produce" become "slower to accept"?), and **escalation rate** (are autonomy levels set correctly?). Agents report their PRs and escalations through a protocol injected into every real run; GitHub-hosted PRs stay fresh via `gh`; each agent carries an explicit **autonomy level (L1–L4)** with promote/demote recommendations computed from the evidence.
 
-| Workbench | Agent editor |
+| New resource | Agent editor |
 |---|---|
-| ![Workbench: resources flow into agents, agents into delivery — wire them by dragging](docs/tour-01-workbench.png) | ![Agent editor: model, effort, cadence, budget, autonomy, resources](docs/tour-03-agent-editor.png) |
+| ![Resource picker: every built-in type, plus a type written by Claude](docs/tour-02-type-picker.png) | ![Agent editor: model, effort, cadence, budget, autonomy, resources](docs/tour-03-agent-editor.png) |
 
 | Run detail | Dashboard |
 |---|---|
@@ -70,8 +70,6 @@
 <p align="center"><img src="docs/tour-09-specification.png" width="640" alt="Specification editor: spec identifier, REQ/AC text, spec file, advisory toggle"></p>
 
 **Dynamic resource types** — in the resource picker, choose **“New type, written by Claude”** and describe a capability (e.g. *“a Postgres connection exposed as PG\* env vars”*). Claude writes a C# module implementing `IResourceTypeModule`, Roslyn compiles it in-process, and every compiler error goes straight back to Claude for another attempt — up to `Looper:ModuleGenerationMaxAttempts` (default 4), with the attempt and the errors shown live and a **Cancel generation** button that kills the run; nothing is installed unless it compiled and loaded. Then the DLL loads live — the new type appears in the picker immediately, its form is rendered from the module's field specs, and `Password` fields are masked like built-in secrets. Modules are stored (source + DLL) in the `modules/` folder next to the API and reloaded — recompiled from source if the DLL is missing — at startup. Power users can also `POST /api/resource-types` with raw module source.
-
-<p align="center"><img src="docs/tour-02-type-picker.png" width="640" alt="Resource type picker, including the AI-generated type card"></p>
 
 ## Requirements
 

@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
+    <Version>1.0.0</Version>
+    <!-- NU1608: Microsoft.CodeAnalysis.CSharp.Workspaces is pinned to the Roslyn 5.9 compiler on purpose (see README/Architecture); the EF design host still works. -->
+    <NoWarn>$(NoWarn);NU1608</NoWarn>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

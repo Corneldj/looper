@@ -40,6 +40,7 @@ import {
   UpdatePrBody,
   UpdateSettingsRequest,
   UserActionDto,
+  VersionDto,
   WorkflowDto,
   WorkflowImportResultDto,
   WorkflowPackageSummaryDto,
@@ -284,6 +285,12 @@ export class ApiService {
   /** Long-running: Claude edits the script in a scratch workspace and the result comes back as a proposal. */
   assistScript(body: ScriptAssistRequest): Observable<ScriptAssistResultDto> {
     return this.http.post<ScriptAssistResultDto>(`${API_BASE}/scripts/assist`, body);
+  }
+
+  // ---------- About ----------
+
+  getVersion(): Observable<VersionDto> {
+    return this.http.get<VersionDto>(`${API_BASE}/system/version`);
   }
 
   // ---------- Claude CLI status ----------

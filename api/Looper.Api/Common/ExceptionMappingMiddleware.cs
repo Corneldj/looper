@@ -34,5 +34,16 @@ public sealed class ExceptionMappingMiddleware(RequestDelegate next, ILogger<Exc
         {
             logger.LogDebug(ex, "Request aborted by client");
         }
+        catch (Exception ex) when (!context.Response.HasStarted)
+        {
+            // Anything else is a bug or an environment failure: log the full story, tell the
+            // caller something honest and safe (no stack traces, no internals) with a status the UI understands.
+            logger.LogError(ex, "Unhandled error handling {Method} {Path}", context.Request.Method, context.Request.Path);
+            await Results.Problem(
+                    title: "Looper hit an unexpected error. The API log has the details.",
+                    detail: ex.GetType().Name,
+                    statusCode: StatusCodes.Status500InternalServerError)
+                .ExecuteAsync(context);
+        }
     }
 }

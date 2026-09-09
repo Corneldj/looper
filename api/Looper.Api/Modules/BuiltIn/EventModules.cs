@@ -4,13 +4,12 @@ using Looper.Api.Infrastructure.Execution;
 namespace Looper.Api.Modules.BuiltIn;
 
 // ============================================================================
-// Events as resources. Raising and listening used to depend on the model (an agent
-// deciding to curl the bus) or on free-text topics typed into an agent. These two
-// resource types make both sides deterministic and visible on the canvas:
+// Events as resources. Raising used to depend on the model deciding to call the bus.
+// The Event Raiser makes the producing side deterministic and visible on the canvas:
 //   📣 Event Raiser  — attached to an agent, the HARNESS raises its topic when the run
 //                      ends the way the resource says (succeeded / failed / always).
-//   📡 Event Listener — attached to an agent, the DISPATCHER wakes that agent whenever
-//                      a matching topic is raised, whatever the agent's trigger mode.
+// The consuming side needs no resource: an agent's own "on events" trigger is its
+// subscription, and the dispatcher matches topics against it.
 // ============================================================================
 
 /// <summary>Raises a named event when the attached agent's run completes — by the harness, not the model.</summary>

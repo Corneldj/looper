@@ -33,6 +33,7 @@ export class SettingsModal implements OnInit {
   protected readonly removing = signal(false);
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly version = signal<string | null>(null);
 
   protected readonly hasStoredKey = computed(() => (this.current()?.hasApiKey ?? false) && !this.removing());
   protected readonly showKeyInput = computed(() => this.mode() === 'ApiKey' && (!this.hasStoredKey() || this.replacing()));
@@ -45,6 +46,7 @@ export class SettingsModal implements OnInit {
   });
 
   ngOnInit(): void {
+    this.api.getVersion().subscribe({ next: v => this.version.set(v.version), error: () => this.version.set(null) });
     this.api.getSettings().subscribe({
       next: settings => {
         this.current.set(settings);

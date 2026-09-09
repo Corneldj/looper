@@ -47,7 +47,7 @@ public sealed record MapAgentDto(
     IReadOnlyList<MapMetricDto> Metrics,
     /// <summary>Topics this agent raises: its completion topics plus attached Event Raisers.</summary>
     IReadOnlyList<string> Raises,
-    /// <summary>Patterns that wake this agent: its own topics (Event mode) plus attached Event Listeners.</summary>
+    /// <summary>Patterns that wake this agent: its own topics, when it runs on events.</summary>
     IReadOnlyList<string> Listens);
 
 /// <summary>The whole workspace as one graph: resources feed agents, agents produce delivery.</summary>

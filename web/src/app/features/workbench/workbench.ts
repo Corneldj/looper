@@ -1,16 +1,4 @@
-import {
-  AfterViewInit,
-  Component,
-  DestroyRef,
-  ElementRef,
-  Injector,
-  OnDestroy,
-  OnInit,
-  computed,
-  inject,
-  signal,
-  viewChild,
-} from '@angular/core';
+import { AfterViewInit, Component, DestroyRef, ElementRef, Injector, OnDestroy, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
@@ -104,6 +92,15 @@ export class Workbench implements OnInit, AfterViewInit, OnDestroy {
   protected readonly editorType = signal<ResourceType | null>(null);
   protected readonly editorTypeDef = signal<ResourceTypeDto | null>(null);
   protected readonly editingResource = signal<ResourceDto | null>(null);
+  /**
+   * One key per open editor, so the component is re-created whenever a different resource (or a
+   * different new type) is edited — the form is initialised once, from inputs, and never reused.
+   */
+  protected readonly editorKeys = computed(() => {
+    const type = this.editorType();
+    if (!type) return [];
+    return [this.editingResource()?.id ?? `new:${type}:${this.editorTypeDef()?.typeKey ?? ''}`];
+  });
   protected readonly workspacesFor = signal<ResourceDto | null>(null);
   protected readonly runScriptFor = signal<ResourceDto | null>(null);
   protected readonly agentEditorOpen = signal(false);

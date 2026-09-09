@@ -30,6 +30,7 @@ describe('SettingsModal', () => {
     fixture.componentInstance.closed.subscribe(() => state.closed++);
     fixture.detectChanges();
     http.match(`${API_BASE}/settings`).forEach(r => r.flush(current));
+    http.match(`${API_BASE}/system/version`).forEach(r => r.flush({ name: 'Looper', version: '1.0.0' }));
     fixture.detectChanges();
     return state;
   }

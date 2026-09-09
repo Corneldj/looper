@@ -23,6 +23,7 @@ type McpTransport = 'stdio' | 'http' | 'sse';
  */
 @Component({
   selector: 'app-resource-editor',
+  host: { '(document:keydown.escape)': 'onEscape()' },
   imports: [FormsModule, FolderPicker, ScriptEditor, EventPicker],
   templateUrl: './resource-editor.html',
   styleUrl: './resource-editor.scss',
@@ -282,6 +283,12 @@ export class ResourceEditor implements OnInit {
 
   cancel(): void {
     this.closed.emit(null);
+  }
+
+  /** Escape closes the editor — unless a save is in flight, when the result is worth waiting for. */
+  protected onEscape(): void {
+    if (this.saving() || this.folderPickerOpen()) return;
+    this.cancel();
   }
 
   save(): void {

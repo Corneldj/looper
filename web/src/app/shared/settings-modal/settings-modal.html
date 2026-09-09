@@ -91,6 +91,10 @@
     }
 
     <div class="modal-footer">
+      @if (version(); as v) {
+        <span class="about">Looper {{ v }}</span>
+      }
+      <span class="spacer"></span>
       <button class="btn btn-ghost" [disabled]="saving()" (click)="cancel()">Cancel</button>
       <button class="btn btn-primary" [disabled]="!canSave()" (click)="save()">{{ saving() ? 'Saving…' : 'Save' }}</button>
     </div>

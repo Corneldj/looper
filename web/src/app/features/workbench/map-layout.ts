@@ -63,7 +63,7 @@ export interface MapLayout {
 export const RES_W = 248;
 export const RES_H = 46;
 export const AGENT_W = 344;
-export const AGENT_H = 138;
+export const AGENT_H = 154;
 export const DELIV_W = 224;
 export const DELIV_H = 60;
 const NODE_GAP = 12;
