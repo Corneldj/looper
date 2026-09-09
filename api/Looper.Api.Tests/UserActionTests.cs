@@ -14,12 +14,12 @@ namespace Looper.Api.Tests;
 public class UserActionProtocolTests
 {
     [Fact]
-    public void Protocol_names_the_endpoint_the_run_id_and_that_raising_is_not_a_failure()
+    public void Protocol_names_the_tool_not_an_endpoint_and_says_raising_is_not_a_failure()
     {
         var protocol = ClaudeCliExecutor.BuildUserActionProtocol(new UserActionConfig());
 
-        Assert.Contains("/api/user-actions", protocol);
-        Assert.Contains("$LOOPER_RUN_ID", protocol);
+        Assert.Contains("ask_user", protocol);
+        Assert.DoesNotContain("curl", protocol);           // a tool call, not a recipe the model may or may not follow
         Assert.Contains("NOT", protocol);      // "Raising a request is NOT ..."
         Assert.Contains("failure", protocol);  // "... a failure"
     }
@@ -48,7 +48,7 @@ public class UserActionProtocolTests
 
         Assert.StartsWith("Base task.", prompt, StringComparison.Ordinal);
         Assert.Contains("USER ACTION REQUESTS", prompt);
-        Assert.Contains("/api/user-actions", prompt);
+        Assert.Contains("ask_user", prompt);
     }
 
     [Fact]

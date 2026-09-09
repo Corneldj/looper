@@ -62,7 +62,7 @@ public class SpecificationModuleTests
         Assert.Contains("SPECIFICATION SPEC-CHECKOUT-1", section);
         Assert.Contains("AC-1, AC-2", section);                 // the parsed identifier inventory
         Assert.Contains("TRACEABILITY (enforced)", section);
-        Assert.Contains("\\\"satisfies\\\"", section);          // the extended registration curl
+        Assert.Contains("satisfies", section);                  // cited through the report_deliverable tool
         Assert.Contains("REJECTS", section);
         Assert.Contains("spec gap", section);                   // uncovered work is raised, not mis-cited
     }

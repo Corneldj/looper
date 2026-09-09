@@ -60,7 +60,7 @@
             <input type="radio" name="trigger-mode" [checked]="form.triggerMode === 'Scheduled'"
                    (change)="form.triggerMode = 'Scheduled'" />
             <span class="trigger-title">⏱ On a schedule</span>
-            <span class="hint">Fires every N minutes — an attached Event Listener can wake it early too.</span>
+            <span class="hint">Fires every N minutes.</span>
           </label>
           <label class="trigger-option" [class.selected]="form.triggerMode === 'Event'">
             <input type="radio" name="trigger-mode" [checked]="form.triggerMode === 'Event'"
@@ -80,7 +80,7 @@
             [allowPatterns]="true"
             (valueChange)="form.triggerTopics = $event"
           />
-          <span class="hint">Pick the events that wake this loop, or create one. Event Listener resources attached below wake it too — wiring them on the workbench shows the chain on the canvas.</span>
+          <span class="hint">Pick the events that wake this loop, or create one. The trigger is the subscription — the workbench draws the chain from whichever agent raises them.</span>
         </div>
       } @else {
       <div class="form-row">

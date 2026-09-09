@@ -100,10 +100,42 @@
 
         @case ('TestingAction') {
           <div class="field">
-            <label>Command</label>
-            <input class="input mono" [(ngModel)]="testCommand" placeholder="python3 verify_report.py" />
-            <span class="hint">Runs after every iteration: a test suite, a validator, a link or spell checker — anything that exits non-zero when the work is wrong.</span>
+            <label>Runs</label>
+            <div class="check-modes">
+              <label class="check-mode" [class.selected]="testMode() === 'command'">
+                <input type="radio" name="check-mode" value="command" [checked]="testMode() === 'command'" (change)="testMode.set('command')" />
+                <span>A shell command</span>
+              </label>
+              <label class="check-mode" [class.selected]="testMode() === 'script'">
+                <input type="radio" name="check-mode" value="script" [checked]="testMode() === 'script'" (change)="testMode.set('script')" />
+                <span>An existing script</span>
+              </label>
+            </div>
+            <span class="hint">Runs after every iteration and must exit 0 for the work to count: a test suite, a validator, a link or spell checker.</span>
           </div>
+          @if (testMode() === 'script') {
+            <div class="field">
+              <label>Script</label>
+              <select class="select check-script" [ngModel]="testScriptId()" (ngModelChange)="testScriptId.set($event)">
+                <option value="">Choose a script…</option>
+                @for (script of checkScripts(); track script.id) {
+                  <option [value]="script.id">{{ script.name }}</option>
+                }
+              </select>
+              @if (checkScriptMissing()) {
+                <span class="hint hint-error">The script this check ran no longer exists — choose another, or switch to a command.</span>
+              } @else if (checkScripts().length === 0) {
+                <span class="hint">No Script resources in this workflow yet — create one first, then point the check at it.</span>
+              } @else {
+                <span class="hint">The script runs exactly as it would as an after-run stage; a non-zero exit fails the check.</span>
+              }
+            </div>
+          } @else {
+            <div class="field">
+              <label>Command</label>
+              <input class="input mono" [(ngModel)]="testCommand" placeholder="python3 verify_report.py" />
+            </div>
+          }
           <div class="form-row">
             <div class="field">
               <label>Working directory <span class="optional">optional</span></label>
@@ -358,7 +390,7 @@
                 <label>{{ field.label }}<span class="req"> *</span></label>
                 <app-event-picker
                   [value]="asText(customValues()['topic'])"
-                  [allowPatterns]="eventPatternsAllowed()"
+                  [allowPatterns]="false"
                   (valueChange)="setCustomValue('topic', $event)"
                 />
                 <span class="hint">{{ field.hint }}</span>

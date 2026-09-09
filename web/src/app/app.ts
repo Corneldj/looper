@@ -5,11 +5,12 @@ import { ClaudeSetup } from './shared/claude-setup/claude-setup';
 import { SettingsModal } from './shared/settings-modal/settings-modal';
 import { WorkflowSwitcher } from './shared/workflow-switcher/workflow-switcher';
 import { WorkflowEditor } from './shared/workflow-switcher/workflow-editor';
+import { WorkflowImport } from './shared/workflow-switcher/workflow-import';
 import { WorkflowDto } from './core/models';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, ClaudeSetup, SettingsModal, WorkflowSwitcher, WorkflowEditor],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, ClaudeSetup, SettingsModal, WorkflowSwitcher, WorkflowEditor, WorkflowImport],
   templateUrl: './app.html',
   styleUrl: './app.scss'
 })
@@ -22,4 +23,5 @@ export class App {
   protected readonly settingsOpen = signal(false);
   /** The workflow editor lives here, outside the topbar, so its fixed backdrop covers the whole page. */
   protected readonly workflowEditor = signal<{ workflow: WorkflowDto | null } | null>(null);
+  protected readonly importOpen = signal(false);
 }

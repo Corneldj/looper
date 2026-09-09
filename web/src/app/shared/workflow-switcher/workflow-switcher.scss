@@ -25,6 +25,14 @@
   font-weight: 600;
 }
 
+/* Separates what you do to this workflow (edit, add) from what moves it between instances (import, export). */
+.switcher-divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 3px;
+  background: var(--border);
+}
+
 /* Topbar controls: SVG icons (text glyphs like ✎ / ＋ render tiny in fallback fonts), 34px hit area. */
 .icon-btn {
   width: 34px;
@@ -34,4 +42,5 @@
   .icon { display: block; width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 
   &:disabled { opacity: 0.4; cursor: default; }
+  &.has-error { color: var(--red); }
 }

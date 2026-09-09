@@ -51,6 +51,26 @@ public static class SecretMasker
             isSecret(key) && !string.IsNullOrEmpty(node?.GetValue<string?>()) ? JsonValue.Create(Sentinel) : node);
     }
 
+    /// <summary>
+    /// Strips secret values entirely (empty string, not the sentinel) and reports which keys were
+    /// stripped — for exports that leave the machine. An import then creates the resource with the
+    /// secret blank and tells the user to fill it in.
+    /// </summary>
+    public static (string Json, IReadOnlyList<string> RedactedKeys) Redact(Resource resource, ResourceModuleRegistry registry)
+    {
+        var isSecret = SecretKeyPredicate(resource.Type, resource.CustomTypeKey, registry);
+        if (isSecret is null) return (resource.ConfigJson, []);
+
+        var redacted = new List<string>();
+        var json = Transform(resource.ConfigJson, (key, node) =>
+        {
+            if (!isSecret(key) || string.IsNullOrEmpty(node?.GetValue<string?>())) return node;
+            redacted.Add(key);
+            return JsonValue.Create("");
+        });
+        return (json, redacted);
+    }
+
     public static string PreserveSecrets(Resource stored, string incomingJson, ResourceModuleRegistry registry)
     {
         var isSecret = SecretKeyPredicate(stored.Type, stored.CustomTypeKey, registry);

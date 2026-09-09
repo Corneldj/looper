@@ -1,0 +1,103 @@
+<div class="modal-backdrop">
+  <div class="modal import-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Import workflow</h2>
+      <button class="icon-btn" title="Close" [disabled]="importing()" (click)="cancel()">✕</button>
+    </div>
+
+    @if (result(); as done) {
+      <div class="import-done">
+        <p class="done-line">
+          <span class="chip chip-green">Imported</span>
+          <span><strong>{{ done.workflow.name }}</strong> — {{ doneSummary() }}</span>
+        </p>
+        @if (done.warnings.length > 0) {
+          <div class="warnings">
+            <span class="section-label">Before you switch anything on</span>
+            <ul>
+              @for (warning of done.warnings; track $index) {
+                <li>{{ warning }}</li>
+              }
+            </ul>
+          </div>
+        }
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" (click)="cancel()">Close</button>
+        <button class="btn btn-primary open-btn" (click)="open()">Open workflow</button>
+      </div>
+    } @else {
+      <p class="editor-blurb">
+        A <span class="mono">.workflow</span> file is exported from any Looper. Importing creates a
+        <strong>new workflow</strong> with its resources, agents and wiring, and installs the resource
+        types it needs. Secrets are never in a package; paths are kept as they were.
+      </p>
+
+      <label
+        class="drop-zone"
+        [class.drag-over]="dragOver()"
+        (dragover)="onDragOver($event)"
+        (dragleave)="dragOver.set(false)"
+        (drop)="onDrop($event)"
+      >
+        <input type="file" accept=".workflow" hidden (change)="onFileInput($event)" />
+        @if (file(); as chosen) {
+          <span class="drop-file mono">{{ chosen.name }}</span>
+          <span class="drop-hint">{{ inspecting() ? 'Reading the package…' : 'Choose another file or drop one here' }}</span>
+        } @else {
+          <span class="drop-title">Choose a .workflow file</span>
+          <span class="drop-hint">or drop it here</span>
+        }
+      </label>
+
+      @if (readError(); as message) {
+        <p class="save-error">{{ message }}</p>
+      }
+
+      @if (summary(); as s) {
+        <div class="preview">
+          <div class="preview-grid">
+            <span class="preview-label">Resources</span><span>{{ s.resources }}</span>
+            <span class="preview-label">Agents</span><span>{{ s.agents }}</span>
+            <span class="preview-label">Resource types</span>
+            <span>
+              @if (s.resourceTypes.length === 0) {
+                built-in only
+              } @else {
+                @for (t of s.resourceTypes; track t.typeKey) {
+                  <span class="type-pill">{{ t.icon }} {{ t.displayName }}</span>
+                }
+              }
+            </span>
+            @if (s.redactedSecrets.length > 0) {
+              <span class="preview-label">Secrets to fill in</span>
+              <span>
+                @for (secret of s.redactedSecrets; track $index) {
+                  <span class="type-pill">{{ secret.resourceName }} → {{ secret.field }}</span>
+                }
+              </span>
+            }
+            @if (s.exportedFrom) {
+              <span class="preview-label">Exported</span><span>{{ s.exportedFrom }}</span>
+            }
+          </div>
+          <div class="field">
+            <label>Name for the new workflow</label>
+            <input class="input" [ngModel]="name()" (ngModelChange)="name.set($event)" (keydown.enter)="import()" />
+          </div>
+        </div>
+      }
+
+      @if (error(); as message) {
+        <p class="save-error">{{ message }}</p>
+      }
+
+      <div class="modal-footer">
+        <button class="btn btn-ghost" [disabled]="importing()" (click)="cancel()">Cancel</button>
+        <button class="btn btn-primary import-btn" [disabled]="!canImport()" (click)="import()">
+          {{ importing() ? 'Importing…' : 'Import' }}
+        </button>
+      </div>
+    }
+  </div>
+</div>

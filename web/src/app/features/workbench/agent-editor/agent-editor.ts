@@ -142,14 +142,8 @@ export class AgentEditor implements OnInit {
 
   protected get canSave(): boolean {
     if (this.form.name.trim().length === 0 || this.form.prompt.trim().length === 0) return false;
-    if (this.form.triggerMode === 'Event' && this.form.triggerTopics.trim().length === 0 && !this.hasListenerResource) return false;
+    if (this.form.triggerMode === 'Event' && this.form.triggerTopics.trim().length === 0) return false;
     return true;
-  }
-
-  /** An attached Event Listener resource is a subscription too — an event-mode agent needs one or typed topics. */
-  protected get hasListenerResource(): boolean {
-    const selected = this.selectedIds();
-    return this.resourcesStore.resources().some(r => selected.has(r.id) && r.type === 'Custom' && r.customTypeKey === 'EventListener');
   }
 
   protected setIntervalPreset(minutes: number): void {

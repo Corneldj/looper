@@ -48,6 +48,30 @@ export interface UpdateSettingsRequest {
   clearApiKey?: boolean;
 }
 
+// ---------- Workflow packages: .workflow files exchanged between Looper instances ----------
+
+/** What a .workflow file holds, as the API reads it back before anything is created. */
+export interface WorkflowPackageSummaryDto {
+  name: string;
+  description: string;
+  exportedFrom: string | null;
+  exportedAtUtc: string;
+  resources: number;
+  agents: number;
+  resourceTypes: { typeKey: string; displayName: string; icon: string; hasDll: boolean }[];
+  redactedSecrets: { resourceRef: string; resourceName: string; field: string }[];
+}
+
+export interface WorkflowImportResultDto {
+  workflow: WorkflowDto;
+  resourceTypesInstalled: string[];
+  resourceTypesReused: string[];
+  resourcesCreated: number;
+  agentsCreated: number;
+  /** Secrets to fill in, paths missing on this machine, agents left paused. */
+  warnings: string[];
+}
+
 // ---------- Workflows: one workbench each ----------
 
 export interface WorkflowDto {

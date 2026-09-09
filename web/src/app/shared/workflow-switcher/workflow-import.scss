@@ -1,0 +1,92 @@
+.import-modal {
+  max-width: 560px;
+}
+
+.editor-blurb {
+  color: var(--text-3);
+  font-size: 12.5px;
+  margin-top: -10px;
+  line-height: 1.5;
+}
+
+.drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 22px 16px;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color 0.12s ease, background 0.12s ease;
+
+  &:hover, &.drag-over { border-color: var(--accent); background: var(--accent-soft); }
+}
+
+.drop-title { font-weight: 600; font-size: 13.5px; }
+.drop-file { font-size: 13px; font-weight: 600; }
+.drop-hint { font-size: 12px; color: var(--text-3); }
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  font-size: 13px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.preview-label { color: var(--text-3); font-size: 12px; font-weight: 600; }
+
+.type-pill {
+  display: inline-block;
+  margin: 0 6px 4px 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.import-done {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.done-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.warnings {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--amber-soft);
+  color: var(--text);
+
+  ul { margin: 8px 0 0; padding-left: 18px; font-size: 12.5px; line-height: 1.5; }
+}
+
+.save-error {
+  font-size: 12.5px;
+  color: var(--red);
+  background: var(--red-soft);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  white-space: pre-line;
+}

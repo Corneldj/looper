@@ -66,15 +66,6 @@ public sealed class GetEventTopicsHandler(LooperDbContext db) : IQueryHandler<Ge
                     $"{resource.Name} needs curation", false);
             }
         }
-        foreach (var resource in resources.Where(r => string.Equals(r.CustomTypeKey, EventListenerModule.TypeKey_, StringComparison.OrdinalIgnoreCase)))
-        {
-            var pattern = EventResources.ListenerPattern(resource.ConfigJson);
-            if (EventDispatcher.IsValidPattern(pattern))
-            {
-                Add(pattern, "listener", $"{resource.Name} listens" +
-                    (resource.Agents.Count == 0 ? "" : " for " + string.Join(", ", resource.Agents)), pattern.EndsWith(".*", StringComparison.Ordinal));
-            }
-        }
         foreach (var agent in agents.Where(a => a.TriggerMode == TriggerMode.Event))
         {
             foreach (var pattern in EventDispatcher.ParsePatterns(agent.TriggerTopics).Where(EventDispatcher.IsValidPattern))

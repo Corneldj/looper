@@ -132,6 +132,10 @@ public static class ScriptResources
     public static ScriptLanguage ParseLanguage(string? language) =>
         string.Equals(language?.Trim(), "bash", StringComparison.OrdinalIgnoreCase) ? ScriptLanguage.Bash : ScriptLanguage.Python;
 
+    public static bool IsScript(Resource resource) =>
+        resource.Type == ResourceType.Custom &&
+        string.Equals(resource.CustomTypeKey, ScriptModule.TypeKey_, StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
     /// The Script resources attached to an agent, parsed; optionally only one trigger stage.
     /// Empty scripts are left out unless asked for — the harness asks, so it can fail them closed.

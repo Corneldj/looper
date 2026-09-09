@@ -56,11 +56,18 @@ public sealed class ScriptRunner(IOptions<LooperOptions> options)
     public Task<TestingActionResult> RunAsync(
         Guid resourceId, string name, ScriptConfig config, string defaultWorkingDirectory,
         IReadOnlyDictionary<string, string>? environment, CancellationToken cancellationToken,
+        int outputCap = ShellCommandRunner.DefaultOutputCap) =>
+        RunScriptAsync(options.Value, resourceId, name, config, defaultWorkingDirectory, environment, cancellationToken, outputCap);
+
+    /// <summary>The one way a script is run, whoever asks: a stage, a manual run, or a Check that points at it.</summary>
+    public static Task<TestingActionResult> RunScriptAsync(
+        LooperOptions options, Guid resourceId, string name, ScriptConfig config, string defaultWorkingDirectory,
+        IReadOnlyDictionary<string, string>? environment, CancellationToken cancellationToken,
         int outputCap = ShellCommandRunner.DefaultOutputCap)
     {
         var path = ScriptResources.Materialize(resourceId, name, config);
-        var command = ScriptResources.BuildCommand(config, path, options.Value.PythonCommand);
-        var timeout = TimeSpan.FromSeconds(config.TimeoutSeconds ?? options.Value.TestingActionTimeoutSeconds);
+        var command = ScriptResources.BuildCommand(config, path, options.PythonCommand);
+        var timeout = TimeSpan.FromSeconds(config.TimeoutSeconds ?? options.TestingActionTimeoutSeconds);
         var workingDirectory = config.WorkingDirectory ?? defaultWorkingDirectory;
         Directory.CreateDirectory(workingDirectory);
         return ShellCommandRunner.RunAsync(name, command, workingDirectory, timeout, environment, cancellationToken, outputCap);

@@ -244,13 +244,23 @@ public sealed class AgentRunCoordinator(
     /// results are carried along so the run record shows every script that executed. Null when
     /// nothing at all ran.
     /// </summary>
+    /// <summary>The scripts a check may point at: every Script resource in the agent's workflow, attached or not.</summary>
+    private async Task<IReadOnlyList<Resource>> WorkflowScriptsAsync(Guid workflowId, CancellationToken cancellationToken)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        return await db.Resources.AsNoTracking()
+            .Where(r => r.WorkflowId == workflowId && r.Type == ResourceType.Custom && r.CustomTypeKey == Modules.BuiltIn.ScriptModule.TypeKey_)
+            .ToListAsync(cancellationToken);
+    }
+
     private async Task<(string ResultsJson, bool AllPassed)?> RunPostRunGatesAsync(
         LoopAgent agent, IReadOnlyList<Resource> resources, Guid runId,
         IReadOnlyList<TestingActionResult> beforeResults, List<TestingActionResult> afterSink,
         RunLogWriter log, CancellationToken cancellationToken)
     {
         var results = new List<TestingActionResult>(beforeResults);
-        results.AddRange(await testingActionRunner.RunAsync(agent, resources, log, cancellationToken));
+        results.AddRange(await testingActionRunner.RunAsync(agent, resources, log, cancellationToken,
+            await WorkflowScriptsAsync(agent.WorkflowId, cancellationToken), runId));
         var after = await scriptRunner.RunStageAsync(
             Modules.BuiltIn.ScriptModule.TriggerAfter, agent, resources, runId, log, cancellationToken);
         afterSink.Clear();

@@ -221,7 +221,8 @@ public sealed class BuildWorkflowHandler(
            - McpServer: {"transport":"stdio|http|sse","command":"…","args":["…"],"env":{},"url":"…"}
            - FileLocation: {"path":"/abs/path","primary":true}   (primary = the agent's working directory)
            - Rag: {"instructions":"…","path":"…?","url":"…?"}
-           - TestingAction ("Check"): {"command":"python3 verify_report.py","workingDirectory":"…?","timeoutSeconds":300} — any command that exits non-zero when the work is wrong
+           - TestingAction ("Check"): {"command":"python3 verify_report.py","workingDirectory":"…?","timeoutSeconds":300} — any command that exits non-zero when the work is wrong;
+             or {"scriptResourceId":"<id of a Script resource in this workflow>"} to run one of the workflow's Script resources as the check
            - Rule: {"text":"…"}
            - RuleSet: {"rules":[{"text":"…","enabled":true}]}
            - SubAgent: {"description":"…","prompt":"…","tools":"Read,Grep?","model":"…?"}
@@ -238,22 +239,21 @@ public sealed class BuildWorkflowHandler(
              (non-zero exit fails the run — verification without tokens).
            - EventRaiser (type "Custom", customTypeKey "EventRaiser"): {"topic":"newsletter.sent","when":"succeeded|failed|always","payload":"{agent} finished: {result}"}
              — Looper raises the topic deterministically when the attached agent's run ends that way. This is HOW loops chain: the
-             producing agent gets a raiser, the consuming agent gets a listener for the same topic.
-           - EventListener (type "Custom", customTypeKey "EventListener"): {"topic":"newsletter.sent"} (exact, or a prefix ending in .*)
-             — wakes the attached agent whenever a matching event is raised, in any trigger mode. Topics are dotted lowercase keys.
-             Every agent also raises agent.<name-slug>.succeeded / .failed automatically. GET {{apiUrl}}/api/events/topics lists known topics.
+             producing agent gets a raiser; the consuming agent is created with "triggerMode":"Event" and that topic in its
+             "triggerTopics" (an exact topic, or a prefix ending in .*). Topics are dotted lowercase keys. Every agent also raises
+             agent.<name-slug>.succeeded / .failed automatically. GET {{apiUrl}}/api/events/topics lists known topics.
              Write real, working code (stdlib only); scripts see LOOPER_API_URL/LOOPER_RUN_ID/LOOPER_AGENT_ID and the agent's credential env vars.
            - Metric (type "Custom", customTypeKey "Metric"): {"unit":"sign-ups","aggregation":"latest|sum|average","direction":"higher|lower","target":1000,"instructions":"how and when to measure"}
              — a user-defined OUTCOME the dashboard tracks (pull requests are just one possible outcome). Create one for whatever the
              workflow is meant to move (sign-ups, conversion, resolution time, revenue, defects) and attach it to every agent whose work
-             affects it; attached agents get a reporting protocol, and Script resources can report by printing `@metric <name>=<number>`.
+             affects it; attached agents get a record_metric tool, and Script resources can report by printing `@metric <name>=<number>`.
            - PatToken ("API key / secret"): {"envVar":"MAILCHIMP_API_KEY","value":"<placeholder>"} / AzureConnection — credential configs: create ONLY with placeholder values and say so in your report; never invent real secrets.
            - Dynamic types: type "Custom" + customTypeKey "<TypeKey>"; configJson keys = the type's field keys.
         3. Create an agent (a loop started on a schedule OR by events — one or the other):
            curl -s -X POST {{apiUrl}}/api/agents -d '{"workflowId":"{{workflowId ?? Domain.Workflow.DefaultId}}","name":"…","description":"…","prompt":"<the loop prompt>","model":"claude-opus-5|claude-sonnet-5|claude-haiku-4-5","effort":"Low|Medium|High","intervalMinutes":60,"triggerMode":"Scheduled","triggerTopics":null,"maxTurns":25,"maxBudgetUsd":null,"workingDirectory":null,"allowedTools":null,"bypassPermissions":true,"dryRun":true,"autonomyLevel":2,"resourceIds":["<resource ids to attach>"]}'
-           For an event-driven loop prefer wiring an EventListener resource (visible on the canvas); "triggerMode":"Event" with
-           "triggerTopics":"topic.one\ntopic.prefix.*" also works (every finished run raises agent.<name-slug>.succeeded/.failed;
-           graph maintenance raises graph.<name-slug>.needs-curation).
+           For an event-driven loop use "triggerMode":"Event" with "triggerTopics":"topic.one\ntopic.prefix.*" — the agent's trigger
+           IS its subscription (every finished run raises agent.<name-slug>.succeeded/.failed; graph maintenance raises
+           graph.<name-slug>.needs-curation). An event-mode agent has no interval.
         4. Update an agent (e.g. to attach more resources later): PUT {{apiUrl}}/api/agents/<id> with the same body shape —
            or wire one resource without resending the body: POST {{apiUrl}}/api/agents/<agent id>/resources/<resource id> (idempotent).
         5. If the workflow genuinely needs a capability no existing type covers, you may commission
@@ -285,7 +285,7 @@ public sealed class BuildWorkflowHandler(
           Reviewer with a real rubric. Gates and reviewers with nothing configured fail every run on purpose.
         - Fetch inputs with a before-run Script rather than asking the model to go and look; verify outputs with an after-run Script
           rather than trusting the model's summary; report outcomes with Metrics (scripts print `@metric name=value`).
-        - Chain loops with EventRaiser → EventListener pairs, never with prose asking one agent to trigger another.
+        - Chain loops with an EventRaiser on the producer and "triggerMode":"Event" on the consumer, never with prose asking one agent to trigger another.
         - Agents start every iteration from a clean context: durable knowledge belongs in Rule Sets, Specifications, and memory
           graphs — never in "remember that…" prompt text. Answers to user action requests are recorded as rules automatically.
 

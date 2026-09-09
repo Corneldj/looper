@@ -41,6 +41,8 @@ import {
   UpdateSettingsRequest,
   UserActionDto,
   WorkflowDto,
+  WorkflowImportResultDto,
+  WorkflowPackageSummaryDto,
   WorkspaceClaimDto,
   WorkspaceDto,
 } from './models';
@@ -71,8 +73,6 @@ export class ApiService {
     return this.http.post<ResourceDto>(`${API_BASE}/resources`, body);
   }
 
-  // ---------- Workflows ----------
-
   // ---------- Settings ----------
 
   getSettings(): Observable<SettingsDto> {
@@ -100,6 +100,26 @@ export class ApiService {
   /** Removes the workflow and everything in it — agents, runs, resources, metric values. */
   deleteWorkflow(id: string): Observable<void> {
     return this.http.delete<void>(`${API_BASE}/workflows/${id}`);
+  }
+
+  /** The workflow as a .workflow file: resources (secrets stripped), agents, wiring and the dynamic types they need, with their DLLs. */
+  exportWorkflowFile(id: string): Observable<Blob> {
+    return this.http.get(`${API_BASE}/workflows/${id}/export`, { responseType: 'blob' });
+  }
+
+  /** Reads a .workflow file back without creating anything — the import preview. */
+  inspectWorkflowFile(file: File): Observable<WorkflowPackageSummaryDto> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return this.http.post<WorkflowPackageSummaryDto>(`${API_BASE}/workflows/import/inspect`, form);
+  }
+
+  /** Creates a new workflow from a .workflow file, installing missing resource types. All or nothing. */
+  importWorkflowFile(file: File, name?: string | null): Observable<WorkflowImportResultDto> {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    if (name) form.append('name', name);
+    return this.http.post<WorkflowImportResultDto>(`${API_BASE}/workflows/import/file`, form);
   }
 
   // ---------- Graph memory infrastructure ----------

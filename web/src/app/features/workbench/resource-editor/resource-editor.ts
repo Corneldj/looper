@@ -1,7 +1,7 @@
 import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../../core/api.service';
-import { AgentsStore, WorkflowsStore } from '../../../core/stores';
+import { AgentsStore, ResourcesStore, WorkflowsStore } from '../../../core/stores';
 import { FolderPicker } from '../../../shared/folder-picker/folder-picker';
 import { ScriptEditor } from './script-editor';
 import { EventPicker } from '../../../shared/event-picker/event-picker';
@@ -30,6 +30,7 @@ type McpTransport = 'stdio' | 'http' | 'sse';
 export class ResourceEditor implements OnInit {
   private readonly api = inject(ApiService);
   private readonly agentsStore = inject(AgentsStore);
+  private readonly resourcesStore = inject(ResourcesStore);
   private readonly workflowsStore = inject(WorkflowsStore);
 
   /** Workflow a new resource goes into; defaults to the one selected in the topbar. */
@@ -44,9 +45,8 @@ export class ResourceEditor implements OnInit {
   /** Scripts get a code editor with run + Claude-assist panels instead of the generic field list. */
   readonly isScriptType = computed(() => this.typeDef()?.typeKey === 'Script');
 
-  /** Event raisers/listeners pick their topic from the catalog; listeners may use prefix patterns. */
-  readonly isEventType = computed(() => ['EventRaiser', 'EventListener'].includes(this.typeDef()?.typeKey ?? ''));
-  readonly eventPatternsAllowed = computed(() => this.typeDef()?.typeKey === 'EventListener');
+  /** Event raisers pick their topic from the catalog (exact topics only — raising takes no wildcards). */
+  readonly isEventType = computed(() => this.typeDef()?.typeKey === 'EventRaiser');
 
   readonly agentNames = computed(() => this.agentsStore.agents().map(a => a.name).sort());
 
@@ -133,9 +133,22 @@ export class ResourceEditor implements OnInit {
   readonly ragUrl = signal('');
 
   // ---------- TestingAction ----------
+  /** What the check runs: a shell command, or one of this workflow's Script resources. */
+  readonly testMode = signal<'command' | 'script'>('command');
   readonly testCommand = signal('');
+  readonly testScriptId = signal('');
   readonly workingDirectory = signal('');
   readonly timeoutSeconds = signal<number | null>(null);
+
+  /** Scripts the check may run — the workflow's own, never this resource itself. */
+  readonly checkScripts = computed(() =>
+    this.resourcesStore.resources()
+      .filter(r => r.type === 'Custom' && r.customTypeKey === 'Script' && r.id !== this.resource()?.id)
+      .sort((a, b) => a.name.localeCompare(b.name)));
+
+  /** True when the saved check points at a script that no longer exists. */
+  readonly checkScriptMissing = computed(() =>
+    this.testMode() === 'script' && !!this.testScriptId() && !this.checkScripts().some(s => s.id === this.testScriptId()));
 
   // ---------- Rule ----------
   readonly ruleText = signal('');
@@ -216,7 +229,7 @@ export class ResourceEditor implements OnInit {
       case 'Rag':
         return !!this.instructions().trim();
       case 'TestingAction':
-        return !!this.testCommand().trim();
+        return this.testMode() === 'script' ? !!this.testScriptId() && !this.checkScriptMissing() : !!this.testCommand().trim();
       case 'Rule':
         return !!this.ruleText().trim();
       case 'RuleSet':
@@ -332,6 +345,8 @@ export class ResourceEditor implements OnInit {
         break;
       case 'TestingAction':
         this.testCommand.set(str('command'));
+        this.testScriptId.set(str('scriptResourceId'));
+        this.testMode.set(this.testScriptId() ? 'script' : 'command');
         this.workingDirectory.set(str('workingDirectory'));
         this.timeoutSeconds.set(
           typeof config['timeoutSeconds'] === 'number' ? (config['timeoutSeconds'] as number) : null,
@@ -427,7 +442,8 @@ export class ResourceEditor implements OnInit {
         return config;
       }
       case 'TestingAction': {
-        const config: Record<string, unknown> = { command: this.testCommand().trim() };
+        const config: Record<string, unknown> =
+          this.testMode() === 'script' ? { scriptResourceId: this.testScriptId() } : { command: this.testCommand().trim() };
         if (this.workingDirectory().trim()) config['workingDirectory'] = this.workingDirectory().trim();
         const timeout = this.timeoutSeconds();
         if (timeout != null && timeout > 0) config['timeoutSeconds'] = timeout;

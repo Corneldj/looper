@@ -73,7 +73,8 @@ public sealed class ClaudeCliExecutor(
             UseShellExecute = false
         };
 
-        BuildArguments(startInfo.ArgumentList, agent, resources, additionalDirectories, contributions, context.FixInstructions, context.TriggerEvents, memoryContext, context.ScriptOutputs);
+        BuildArguments(startInfo.ArgumentList, agent, resources, additionalDirectories, contributions, context.FixInstructions, context.TriggerEvents, memoryContext, context.ScriptOutputs,
+            Mcp.LooperTools.ServerUrl(options.Value.PublicUrl, context.RunId));
 
         foreach (var (key, value) in AgentWorkspace.ResolveEnvironment(resources))
         {
@@ -191,7 +192,7 @@ public sealed class ClaudeCliExecutor(
     private void BuildArguments(ICollection<string> args, LoopAgent agent, IReadOnlyList<Resource> resources,
         IReadOnlyList<string> additionalDirectories, IReadOnlyList<ResourceContribution> contributions,
         string? fixInstructions, string? triggerEvents = null,
-        IReadOnlyList<string>? memoryContext = null, string? scriptOutputs = null)
+        IReadOnlyList<string>? memoryContext = null, string? scriptOutputs = null, string? looperServerUrl = null)
     {
         args.Add("-p");
         args.Add(BuildPrompt(agent, resources, contributions, fixInstructions, triggerEvents, memoryContext, scriptOutputs));
@@ -215,8 +216,9 @@ public sealed class ClaudeCliExecutor(
 
         if (!string.IsNullOrWhiteSpace(agent.AllowedTools))
         {
+            // A tool allowlist never locks the run out of Looper's own tools — they are how it reports.
             args.Add("--allowedTools");
-            args.Add(agent.AllowedTools);
+            args.Add(agent.AllowedTools.Trim().TrimEnd(',') + "," + Mcp.LooperTools.QualifiedName("*").TrimEnd('*').TrimEnd('_'));
         }
 
         foreach (var dir in additionalDirectories
@@ -234,7 +236,7 @@ public sealed class ClaudeCliExecutor(
             args.Add(systemPrompt);
         }
 
-        var mcpConfig = BuildMcpConfig(resources, contributions);
+        var mcpConfig = BuildMcpConfig(resources, contributions, looperServerUrl);
         if (mcpConfig is not null)
         {
             args.Add("--mcp-config");
@@ -322,17 +324,14 @@ public sealed class ClaudeCliExecutor(
     }
 
     /// <summary>Standing instructions for reporting shipped work and handing off — always present on real runs.</summary>
-    private const string DeliveryProtocol =
-        "Delivery reporting: when you open a pull request — or finish any other deliverable that has a link — register it with Looper immediately: " +
-        "curl -s -X POST \"$LOOPER_API_URL/api/delivery/prs\" -H 'Content-Type: application/json' " +
-        "-d \"{\\\"runId\\\":\\\"$LOOPER_RUN_ID\\\",\\\"url\\\":\\\"<link to the deliverable>\\\",\\\"title\\\":\\\"<what it is>\\\",\\\"repoPath\\\":\\\"$PWD\\\"}\". " +
-        "If you are blocked on something only a human can decide or authorize, register an escalation and stop cleanly: " +
-        "curl -s -X POST \"$LOOPER_API_URL/api/runs/$LOOPER_RUN_ID/escalate\" -H 'Content-Type: application/json' " +
-        "-d \"{\\\"reason\\\":\\\"<one sentence on what you need>\\\"}\". Never invent a link; only register work you actually finished. " +
-        "You may also raise a named event on Looper's event bus to signal other loops (topics are dotted lowercase keys, e.g. docs.updated): " +
-        "curl -s -X POST \"$LOOPER_API_URL/api/events\" -H 'Content-Type: application/json' " +
-        "-d \"{\\\"runId\\\":\\\"$LOOPER_RUN_ID\\\",\\\"topic\\\":\\\"<topic>\\\",\\\"payload\\\":\\\"<what happened>\\\"}\". " +
-        "Raise events only for real, completed facts — never speculatively.";
+    internal const string DeliveryProtocol =
+        "LOOPER TOOLS: Looper is connected as an MCP server named 'looper' (tools appear as mcp__looper__<name>); each resource " +
+        "you were given that needs a call from you shows up as one of its tools. Three are always there: " +
+        "report_deliverable — the moment you finish anything with a link (a pull request, a page, a document), register it; " +
+        "never invent a link and only register work you actually finished. " +
+        "escalate — when you are blocked on something only a human can decide or authorize; then stop cleanly. " +
+        "raise_event — to signal other loops with a named event (dotted lowercase topic) for real, completed facts only. " +
+        "Use these tools rather than calling Looper's HTTP API yourself.";
 
     private static string? BuildAppendedSystemPrompt(IReadOnlyList<Resource> resources,
         IReadOnlyList<ResourceContribution> contributions) =>
@@ -347,20 +346,16 @@ public sealed class ClaudeCliExecutor(
 
     internal static string BuildWorkspaceProtocol(Resource pool, WorkspacePoolConfig config) =>
         $"DYNAMIC WORKSPACES — pool '{pool.Name}' (root {config.RootPath}). When your task is a distinct unit of work " +
-        "(a feature, a fix, a project), claim a dedicated workspace for it instead of working in a shared directory: " +
-        $"curl -s -X POST \"$LOOPER_API_URL/api/workspaces\" -H 'Content-Type: application/json' " +
-        $"-d \"{{\\\"resourceId\\\":\\\"{pool.Id}\\\",\\\"runId\\\":\\\"$LOOPER_RUN_ID\\\",\\\"unit\\\":\\\"<short-kebab-name>\\\",\\\"context\\\":\\\"<what this unit is about>\\\"}}\" " +
-        "— the response carries the workspace path; cd there and read WORKBRIEF.md first (re-claiming the same unit returns the same " +
-        "workspace, so iterations resume where the last one left off). Before finishing an iteration, append a handoff note to " +
-        "WORKBRIEF.md. When the unit is fully complete: " +
-        "curl -s -X POST \"$LOOPER_API_URL/api/workspaces/<workspace-id>/done\" -H 'Content-Type: application/json' -d '{\"summary\":\"<one line>\"}'. " +
-        $"List this pool's workspaces: curl -s \"$LOOPER_API_URL/api/workspaces?resourceId={pool.Id}\".";
+        "(a feature, a fix, a project), claim a dedicated workspace for it with the Looper tool claim_workspace instead of working " +
+        "in a shared directory — it returns the workspace path; cd there and read WORKBRIEF.md first (claiming the same unit again " +
+        "returns the same workspace, so iterations resume where the last one left off). Before finishing an iteration, append a " +
+        "handoff note to WORKBRIEF.md. When the unit is fully complete, call finish_workspace; list_workspaces shows what this " +
+        "pool already holds.";
 
     internal static string BuildUserActionProtocol(UserActionConfig config) =>
         "USER ACTION REQUESTS: when you are blocked by something only the user can do or decide — unclear requirements, " +
-        "a choice between real alternatives, a credential or approval you lack — raise a request instead of guessing or failing: " +
-        "curl -s -X POST \"$LOOPER_API_URL/api/user-actions\" -H 'Content-Type: application/json' " +
-        "-d \"{\\\"runId\\\":\\\"$LOOPER_RUN_ID\\\",\\\"title\\\":\\\"<one-line ask>\\\",\\\"details\\\":\\\"<exactly what you need and why, with the options if it is a decision>\\\"}\". " +
+        "a choice between real alternatives, a credential or approval you lack — raise a request with the Looper tool ask_user " +
+        "instead of guessing or failing. " +
         "Then finish the iteration cleanly, summarising what you completed and what waits on the user. Raising a request is NOT " +
         "a failure — your loop simply pauses until the user completes it. You start every iteration from a clean context: the " +
         "user's answer is never handed to you as a message. It is recorded into your resources — as a standing rule in your " +
@@ -393,15 +388,22 @@ public sealed class ClaudeCliExecutor(
             .Where(t => !string.IsNullOrWhiteSpace(t));
     }
 
-    private static string? BuildMcpConfig(IReadOnlyList<Resource> resources,
-        IReadOnlyList<ResourceContribution> contributions)
+    internal static string? BuildMcpConfig(IReadOnlyList<Resource> resources,
+        IReadOnlyList<ResourceContribution> contributions, string? looperServerUrl = null)
     {
         var servers = new Dictionary<string, object>();
+
+        // Looper's own tools first, so a user server that happens to be called "looper" gets renamed, not the other way round.
+        if (!string.IsNullOrWhiteSpace(looperServerUrl))
+        {
+            servers[Mcp.LooperTools.ServerName] = new { type = "http", url = looperServerUrl };
+        }
 
         foreach (var resource in resources.Where(r => r.Type == ResourceType.McpServer))
         {
             var config = ResourceConfig.Parse<McpServerConfig>(resource);
             var key = Slugify(resource.Name);
+            while (servers.ContainsKey(key)) key += "-x";   // Looper's own server keeps its name
 
             if (config.Transport is "http" or "sse" && !string.IsNullOrWhiteSpace(config.Url))
             {

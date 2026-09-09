@@ -46,7 +46,7 @@ public sealed class UpdateAgentHandler(LooperDbContext db, AgentRunCoordinator c
             .Where(r => request.ResourceIds.Contains(r.Id))
             .ToListAsync(cancellationToken);
         AgentTriggers.RequireSameWorkflow(agent.WorkflowId, resources);
-        AgentTriggers.RequireSomethingToListenFor(request, resources);
+        AgentTriggers.RequireSomethingToListenFor(request);
         agent.Resources.Clear();
         agent.Resources.AddRange(resources);
 

@@ -40,7 +40,8 @@ public class MetricModuleTests
         Assert.Contains("How to measure it: Read the analytics API", section);
         Assert.Contains("ADD UP", section);
         Assert.Contains("Higher is better; the target is 1000 sign-ups.", section);
-        Assert.Contains($"\\\"metric\\\":\\\"{Id}\\\"", section);
+        Assert.Contains("record_metric", section);              // the tool, not a curl recipe
+        Assert.DoesNotContain("curl", section);
         Assert.Contains("@metric sign-ups=<number>", section);
         Assert.Contains("never estimates", section);
     }

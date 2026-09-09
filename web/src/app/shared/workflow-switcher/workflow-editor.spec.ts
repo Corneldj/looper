@@ -4,6 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { API_BASE } from '../../core/api.service';
 import { WorkflowsStore } from '../../core/stores';
 import { WorkflowDto } from '../../core/models';
+import { FileDownloads } from '../../core/file-downloads';
 import { WorkflowEditor } from './workflow-editor';
 
 function workflow(overrides: Partial<WorkflowDto> = {}): WorkflowDto {
@@ -79,5 +80,20 @@ describe('WorkflowEditor', () => {
     expect(store.workflows().map(w => w.id)).toEqual(['default']);
     expect(store.selectedId()).toBe('default');
     expect(state.closed).toBe(1);
+  });
+  it('exports the workflow as a .workflow file named after it', () => {
+    const downloads = TestBed.inject(FileDownloads);
+    const saved = spyOn(downloads, 'saveBlob');
+    const state = create(workflow({ id: 'growth', name: 'Growth loops', isDefault: false }));
+    const element: HTMLElement = state.fixture.nativeElement;
+
+    (element.querySelector('.export-btn') as HTMLButtonElement).click();
+    const get = http.expectOne(r => r.method === 'GET' && r.url === `${API_BASE}/workflows/growth/export`);
+    expect(get.request.responseType).toBe('blob');
+    get.flush(new Blob(['PK']));
+    state.fixture.detectChanges();
+
+    expect(saved).toHaveBeenCalledWith('growth-loops.workflow', jasmine.any(Blob));
+    expect(state.closed).toBe(0);
   });
 });

@@ -58,11 +58,10 @@ public sealed class MetricModule : IResourceTypeModule
             $"METRIC '{context.ResourceName}'{unit} — an outcome the user tracks on the dashboard." +
             (string.IsNullOrWhiteSpace(context.ResourceDescription) ? "" : $" {context.ResourceDescription.Trim()}") +
             (string.IsNullOrWhiteSpace(config.Instructions) ? "" : $"\nHow to measure it: {config.Instructions.Trim()}") +
-            $"\n{semantics} {goal} Report a measurement whenever you have a real one: " +
-            "curl -s -X POST \"$LOOPER_API_URL/api/metrics/values\" -H 'Content-Type: application/json' " +
-            $"-d \"{{\\\"metric\\\":\\\"{id}\\\",\\\"runId\\\":\\\"$LOOPER_RUN_ID\\\",\\\"value\\\":<number>,\\\"note\\\":\\\"<what you measured and how>\\\"}}\". " +
-            $"(The metric id is also in ${MetricResources.EnvVarName(context.ResourceName)}; a script can instead print a line " +
-            $"`@metric {MetricResources.Slug(context.ResourceName)}=<number> <note>` and Looper records it.) " +
+            $"\n{semantics} {goal} Report a measurement whenever you have a real one with the Looper tool record_metric " +
+            $"(metric \"{context.ResourceName}\"). " +
+            $"(A script can instead print a line `@metric {MetricResources.Slug(context.ResourceName)}=<number> <note>` and Looper " +
+            $"records it; the metric id is in ${MetricResources.EnvVarName(context.ResourceName)}.) " +
             "Report only measured facts — never estimates, projections or hopes; if you could not measure it this iteration, report nothing.");
 
         return contribution;

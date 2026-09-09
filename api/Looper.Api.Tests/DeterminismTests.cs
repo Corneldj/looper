@@ -82,7 +82,6 @@ public class ArchitectDeterminismPromptTests
     [InlineData("customTypeKey \"Script\"")]
     [InlineData("customTypeKey \"Metric\"")]
     [InlineData("customTypeKey \"EventRaiser\"")]
-    [InlineData("customTypeKey \"EventListener\"")]
     [InlineData("customTypeKey \"Specification\"")]
     [InlineData("- UserAction:")]
     public void Every_resource_type_added_this_year_is_documented(string marker)

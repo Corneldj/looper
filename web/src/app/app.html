@@ -13,6 +13,7 @@
     <app-workflow-switcher
       (newRequested)="workflowEditor.set({ workflow: null })"
       (editRequested)="workflowEditor.set({ workflow: $event })"
+      (importRequested)="importOpen.set(true)"
     />
 
     <div class="topbar-status">
@@ -57,4 +58,8 @@
 
 @if (workflowEditor(); as editor) {
   <app-workflow-editor [workflow]="editor.workflow" (closed)="workflowEditor.set(null)" />
+}
+
+@if (importOpen()) {
+  <app-workflow-import (closed)="importOpen.set(false)" />
 }

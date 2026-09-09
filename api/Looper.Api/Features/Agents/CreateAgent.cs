@@ -39,7 +39,7 @@ public sealed class CreateAgentHandler(LooperDbContext db)
             .Where(r => request.ResourceIds.Contains(r.Id))
             .ToListAsync(cancellationToken);
         AgentTriggers.RequireSameWorkflow(workflowId, resources);
-        AgentTriggers.RequireSomethingToListenFor(request, resources);
+        AgentTriggers.RequireSomethingToListenFor(request);
 
         // New agents start disabled and unscheduled; SetAgentEnabled puts them on the loop.
         var agent = new LoopAgent
@@ -71,14 +71,12 @@ public static class AgentTriggers
         }
     }
 
-    /// <summary>An event-triggered agent must be reachable: its own topic list or at least one Event Listener resource.</summary>
-    public static void RequireSomethingToListenFor(SaveAgentRequest request, IEnumerable<Resource> resources)
+    /// <summary>An event-triggered agent must be reachable: it needs at least one topic to listen for.</summary>
+    public static void RequireSomethingToListenFor(SaveAgentRequest request)
     {
         if (request.TriggerMode != TriggerMode.Event) return;
         if (Looper.Api.Infrastructure.Execution.EventDispatcher.ParsePatterns(request.TriggerTopics).Count > 0) return;
-        if (resources.Any(Looper.Api.Modules.BuiltIn.EventResources.IsListener)) return;
-        throw new ValidationException(
-            "An event-triggered agent needs something to listen for: pick at least one event, or attach an Event Listener resource.");
+        throw new ValidationException("An event-triggered agent needs something to listen for: pick at least one event.");
     }
 }
 

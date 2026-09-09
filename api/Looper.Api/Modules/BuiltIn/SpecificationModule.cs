@@ -65,10 +65,8 @@ public sealed class SpecificationModule : IResourceTypeModule
             (config.Path is not null ? $" Full spec on disk at {config.Path} (also $LOOPER_SPEC_PATH) — read it before building." : "") +
             (body is not null ? $"\n---\n{body}\n---" : "") +
             "\nTRACEABILITY" + (config.Advisory ? " (advisory)" : " (enforced)") + ": every deliverable you register — a pull request, " +
-            "or any finished piece of work with a link — must cite the acceptance criteria it satisfies; register with the satisfies field: " +
-            "curl -s -X POST \"$LOOPER_API_URL/api/delivery/prs\" -H 'Content-Type: application/json' " +
-            "-d \"{\\\"runId\\\":\\\"$LOOPER_RUN_ID\\\",\\\"url\\\":\\\"<link to the deliverable>\\\",\\\"title\\\":\\\"<what it is>\\\"," +
-            "\\\"repoPath\\\":\\\"$PWD\\\",\\\"satisfies\\\":\\\"AC-1,AC-3\\\"}\". " +
+            "or any finished piece of work with a link — must cite the acceptance criteria it satisfies: register it with the Looper " +
+            "tool report_deliverable and put the ids in its satisfies argument (e.g. satisfies: \"AC-1,AC-3\"). " +
             (config.Advisory
                 ? "Citations are checked against the spec when present. "
                 : "Looper REJECTS registrations that omit citations or cite criteria not in the spec. ") +

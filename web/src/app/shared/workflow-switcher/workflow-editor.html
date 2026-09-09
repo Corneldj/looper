@@ -27,6 +27,9 @@
     <div class="modal-footer">
       @if (workflow(); as w) {
         <button class="btn btn-danger" [disabled]="!canDelete()" [title]="w.isDefault ? 'The default workflow cannot be deleted' : 'Delete this workflow and everything in it'" (click)="remove()">Delete</button>
+        <button class="btn btn-ghost export-btn" [disabled]="exporting() || saving()" title="Download this workflow as a .workflow file another Looper can import (secrets are left out)" (click)="exportWorkflow()">
+          {{ exporting() ? 'Exporting…' : 'Export' }}
+        </button>
         <span class="spacer"></span>
       }
       <button class="btn btn-ghost" [disabled]="saving()" (click)="cancel()">Cancel</button>

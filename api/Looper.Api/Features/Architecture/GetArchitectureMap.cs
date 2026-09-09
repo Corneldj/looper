@@ -137,14 +137,6 @@ public sealed class GetArchitectureMapHandler(
             .SelectMany(x => x.AgentIds.Select(id => (AgentId: id, x.Topic)))
             .GroupBy(x => x.AgentId)
             .ToDictionary(g => g.Key, g => g.Select(x => x.Topic).Distinct().ToList());
-        var listenersByAgent = resources
-            .Where(r => r.Type == ResourceType.Custom && string.Equals(r.CustomTypeKey, Modules.BuiltIn.EventListenerModule.TypeKey_, StringComparison.OrdinalIgnoreCase))
-            .Select(r => (r.AgentIds, Pattern: Modules.BuiltIn.EventResources.ListenerPattern(r.ConfigJson)))
-            .Where(x => Infrastructure.Execution.EventDispatcher.IsValidPattern(x.Pattern))
-            .SelectMany(x => x.AgentIds.Select(id => (AgentId: id, x.Pattern)))
-            .GroupBy(x => x.AgentId)
-            .ToDictionary(g => g.Key, g => g.Select(x => x.Pattern).ToList());
-
         return new ArchitectureMapDto(
             resources.Select(r =>
             {
@@ -162,8 +154,7 @@ public sealed class GetArchitectureMapHandler(
                 metricsByAgent.GetValueOrDefault(a.Id) ?? [],
                 new[] { Infrastructure.Execution.EventDispatcher.CompletionTopic(a.Name, true), Infrastructure.Execution.EventDispatcher.CompletionTopic(a.Name, false) }
                     .Concat(raisersByAgent.GetValueOrDefault(a.Id) ?? []).Distinct().ToList(),
-                (a.TriggerMode == TriggerMode.Event ? Infrastructure.Execution.EventDispatcher.ParsePatterns(a.TriggerTopics) : [])
-                    .Concat(listenersByAgent.GetValueOrDefault(a.Id) ?? []).Distinct().ToList())).ToList());
+                Infrastructure.Execution.EventDispatcher.EffectivePatterns(a.TriggerMode, a.TriggerTopics))).ToList());
     }
 
     private (string Icon, string Label) TypeMeta(ResourceType type, string? customTypeKey)

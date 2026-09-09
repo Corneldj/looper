@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
+import { FileDownloads, workflowFileName } from '../../core/file-downloads';
 import { WorkflowsStore } from '../../core/stores';
 import { WorkflowDto } from '../../core/models';
 
@@ -15,6 +16,7 @@ import { WorkflowDto } from '../../core/models';
 export class WorkflowEditor implements OnInit {
   private readonly api = inject(ApiService);
   private readonly store = inject(WorkflowsStore);
+  private readonly downloads = inject(FileDownloads);
 
   /** Existing workflow when editing; null when creating. */
   readonly workflow = input<WorkflowDto | null>(null);
@@ -23,6 +25,7 @@ export class WorkflowEditor implements OnInit {
   protected readonly name = signal('');
   protected readonly description = signal('');
   protected readonly saving = signal(false);
+  protected readonly exporting = signal(false);
   protected readonly error = signal<string | null>(null);
 
   protected readonly canSave = computed(() => this.name().trim().length > 0 && !this.saving());
@@ -61,6 +64,24 @@ export class WorkflowEditor implements OnInit {
       error: err => {
         this.saving.set(false);
         this.error.set(err?.error?.title || err?.error?.detail || 'Saving the workflow failed — is the API running?');
+      },
+    });
+  }
+
+  /** Downloads the workflow as a .workflow file another Looper can import. Secrets are stripped server-side. */
+  protected exportWorkflow(): void {
+    const existing = this.workflow();
+    if (!existing || this.exporting()) return;
+    this.exporting.set(true);
+    this.error.set(null);
+    this.api.exportWorkflowFile(existing.id).subscribe({
+      next: blob => {
+        this.exporting.set(false);
+        this.downloads.saveBlob(workflowFileName(existing.name), blob);
+      },
+      error: err => {
+        this.exporting.set(false);
+        this.error.set(err?.error?.title || 'Exporting the workflow failed — is the API running?');
       },
     });
   }

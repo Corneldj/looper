@@ -54,8 +54,16 @@ public sealed class SubAgentConfig
 
 public sealed class TestingActionConfig
 {
+    /// <summary>A shell command to run. Ignored when <see cref="ScriptResourceId"/> is set.</summary>
     public string Command { get; set; } = "";
+
+    /// <summary>Run an existing Script resource (from the same workflow) instead of a plain command.</summary>
+    public Guid? ScriptResourceId { get; set; }
+
+    /// <summary>Overrides the agent's (or, for a script, the script's own) working directory.</summary>
     public string? WorkingDirectory { get; set; }
+
+    /// <summary>Overrides the default (or, for a script, the script's own) timeout.</summary>
     public int? TimeoutSeconds { get; set; }
 }
 

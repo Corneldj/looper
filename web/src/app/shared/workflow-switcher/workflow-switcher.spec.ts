@@ -4,6 +4,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { API_BASE } from '../../core/api.service';
 import { WorkflowsStore } from '../../core/stores';
 import { WorkflowDto } from '../../core/models';
+import { FileDownloads } from '../../core/file-downloads';
 import { WorkflowSwitcher } from './workflow-switcher';
 
 function workflow(overrides: Partial<WorkflowDto> = {}): WorkflowDto {
@@ -79,5 +80,19 @@ describe('WorkflowSwitcher', () => {
 
     expect(requests).toEqual(['new', jasmine.objectContaining({ id: 'default' })]);
     expect(element.querySelector('app-workflow-editor')).toBeNull();
+  });
+
+  it('exports the selected workflow as a .workflow file from the topbar', () => {
+    const saved = spyOn(TestBed.inject(FileDownloads), 'saveBlob');
+    const fixture = create([workflow(), workflow({ id: 'mkt', name: 'Marketing loops', isDefault: false })]);
+    TestBed.inject(WorkflowsStore).select('mkt');
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('.export-btn') as HTMLButtonElement).click();
+    const get = http.expectOne(r => r.method === 'GET' && r.url === `${API_BASE}/workflows/mkt/export`);
+    get.flush(new Blob(['PK']));
+    fixture.detectChanges();
+
+    expect(saved).toHaveBeenCalledWith('marketing-loops.workflow', jasmine.any(Blob));
   });
 });

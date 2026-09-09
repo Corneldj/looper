@@ -42,12 +42,6 @@ public class EventModuleTests
         Assert.Contains("not a valid event topic", ex.Message);
         raiser.PrepareRun(Ctx("""{"topic":"newsletter.sent"}"""));   // fine
         raiser.PrepareRun(Ctx("{}"));                                 // empty is the form's problem, not ours
-
-        var listener = new EventListenerModule();
-        Assert.Throws<ArgumentException>(() => listener.PrepareRun(Ctx("""{"topic":"agent.*.succeeded"}""")));
-        listener.PrepareRun(Ctx("""{"topic":"agent.docs-gardener.*"}"""));
-        Assert.Contains("EVENT LISTENER 'agent.docs-gardener.*'",
-            listener.Contribute(Ctx("""{"topic":"agent.docs-gardener.*"}""")).PromptSections[0]);
     }
 
     [Theory]
@@ -82,25 +76,21 @@ public class EventModuleTests
     }
 
     [Fact]
-    public void Effective_patterns_combine_the_agent_topics_with_attached_listeners_by_mode()
+    public void Effective_patterns_are_the_agents_own_topics_and_only_in_event_mode()
     {
-        string[] listeners = ["""{"topic":"newsletter.sent"}""", """{"topic":"bad pattern"}"""];
-
-        Assert.Equal(["newsletter.sent"],
-            EventDispatcher.EffectivePatterns(TriggerMode.Scheduled, "prd.approved", listeners));
-        Assert.Equal(["prd.approved", "newsletter.sent"],
-            EventDispatcher.EffectivePatterns(TriggerMode.Event, "prd.approved", listeners));
-        Assert.Empty(EventDispatcher.EffectivePatterns(TriggerMode.Scheduled, "prd.approved", []));
+        Assert.Equal(["prd.approved", "newsletter.*"],
+            EventDispatcher.EffectivePatterns(TriggerMode.Event, "prd.approved\nbad pattern\nnewsletter.*\nprd.approved"));
+        Assert.Empty(EventDispatcher.EffectivePatterns(TriggerMode.Scheduled, "prd.approved"));
     }
 }
 
-public sealed class EventListenerDispatchTests : IDisposable
+public sealed class EventTriggerDispatchTests : IDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly DbContextOptions<LooperDbContext> _options;
     private readonly EventDispatcher _dispatcher = new(NullLogger<EventDispatcher>.Instance);
 
-    public EventListenerDispatchTests()
+    public EventTriggerDispatchTests()
     {
         _connection = new SqliteConnection("DataSource=:memory:");
         _connection.Open();
@@ -111,21 +101,16 @@ public sealed class EventListenerDispatchTests : IDisposable
 
     public void Dispose() => _connection.Dispose();
 
-    private static Resource Listener(string pattern) => new()
-    {
-        Name = $"L {pattern}", Type = ResourceType.Custom, CustomTypeKey = "EventListener",
-        ConfigJson = $$"""{"topic":"{{pattern}}"}"""
-    };
-
     [Fact]
-    public async Task An_attached_listener_wakes_a_scheduled_agent_and_a_wrong_topic_does_not()
+    public async Task An_event_mode_agent_is_woken_by_its_topic_and_a_scheduled_one_never_is()
     {
         await using var db = new LooperDbContext(_options);
-        var wired = new LoopAgent { Name = "Wired", Prompt = "p", Enabled = true, TriggerMode = TriggerMode.Scheduled, DryRun = true, Resources = { Listener("newsletter.sent") } };
-        var prefix = new LoopAgent { Name = "Prefix", Prompt = "p", Enabled = true, TriggerMode = TriggerMode.Scheduled, DryRun = true, Resources = { Listener("newsletter.*") } };
-        var other = new LoopAgent { Name = "Other", Prompt = "p", Enabled = true, TriggerMode = TriggerMode.Scheduled, DryRun = true, Resources = { Listener("docs.updated") } };
-        var off = new LoopAgent { Name = "Off", Prompt = "p", Enabled = false, TriggerMode = TriggerMode.Scheduled, DryRun = true, Resources = { Listener("newsletter.sent") } };
-        db.Agents.AddRange(wired, prefix, other, off);
+        var wired = new LoopAgent { Name = "Wired", Prompt = "p", Enabled = true, TriggerMode = TriggerMode.Event, TriggerTopics = "newsletter.sent", DryRun = true };
+        var prefix = new LoopAgent { Name = "Prefix", Prompt = "p", Enabled = true, TriggerMode = TriggerMode.Event, TriggerTopics = "newsletter.*", DryRun = true };
+        var other = new LoopAgent { Name = "Other", Prompt = "p", Enabled = true, TriggerMode = TriggerMode.Event, TriggerTopics = "docs.updated", DryRun = true };
+        var off = new LoopAgent { Name = "Off", Prompt = "p", Enabled = false, TriggerMode = TriggerMode.Event, TriggerTopics = "newsletter.sent", DryRun = true };
+        var scheduled = new LoopAgent { Name = "Scheduled", Prompt = "p", Enabled = true, TriggerMode = TriggerMode.Scheduled, TriggerTopics = "newsletter.sent", DryRun = true };
+        db.Agents.AddRange(wired, prefix, other, off, scheduled);
         await db.SaveChangesAsync();
 
         await _dispatcher.RaiseAsync(db, "newsletter.sent", "42 sent", EventSource.Harness, null, null, 0, default);
@@ -134,8 +119,7 @@ public sealed class EventListenerDispatchTests : IDisposable
         Assert.Equal(2, delivered.Count);
         Assert.Contains(wired.Id, delivered);
         Assert.Contains(prefix.Id, delivered);
-        Assert.DoesNotContain(other.Id, delivered);
-        Assert.DoesNotContain(off.Id, delivered);
+        Assert.DoesNotContain(scheduled.Id, delivered);   // a schedule is not a subscription
     }
 }
 
@@ -173,7 +157,7 @@ public class EventResourceApiTests(LooperApiFactory factory) : IClassFixture<Loo
     {
         var types = await _client.GetFromJsonAsync<List<Dictionary<string, System.Text.Json.JsonElement>>>("/api/resource-types", TestJson.Options);
         Assert.Contains(types!, t => t["typeKey"].GetString() == "EventRaiser");
-        Assert.Contains(types!, t => t["typeKey"].GetString() == "EventListener");
+        Assert.DoesNotContain(types!, t => t["typeKey"].GetString() == "EventListener");   // retired: the agent's trigger is the listener
 
         var bad = await _client.PostAsJsonAsync("/api/resources", new
         {
@@ -187,9 +171,10 @@ public class EventResourceApiTests(LooperApiFactory factory) : IClassFixture<Loo
     public async Task The_topic_catalog_lists_completions_raisers_listeners_and_seen_topics()
     {
         var raiser = await CreateResource("Newsletter sent", "EventRaiser", """{"topic":"newsletter.sent","when":"succeeded"}""");
-        var listener = await CreateResource("On newsletter", "EventListener", """{"topic":"newsletter.*"}""");
-        var agent = await PostAgent("Catalog agent", "Scheduled", null, raiser, listener);
+        var agent = await PostAgent("Catalog agent", "Scheduled", null, raiser);
         var agentId = (await agent.Content.ReadFromJsonAsync<IdResponse>(TestJson.Options))!.Id;
+        var listenerAgent = await PostAgent("On newsletter", "Event", "newsletter.*");
+        var listenerAgentId = (await listenerAgent.Content.ReadFromJsonAsync<IdResponse>(TestJson.Options))!.Id;
         try
         {
             await _client.PostAsJsonAsync("/api/events", new { topic = "adhoc.ping", payload = "" }, TestJson.Options);
@@ -205,6 +190,7 @@ public class EventResourceApiTests(LooperApiFactory factory) : IClassFixture<Loo
 
             var listens = Assert.Single(catalog!, t => t.Topic == "newsletter.*");
             Assert.Equal("listener", listens.Kind);
+            Assert.Contains("On newsletter listens", listens.Source);
             Assert.True(listens.IsPattern);
 
             Assert.Equal("seen", Assert.Single(catalog!, t => t.Topic == "adhoc.ping").Kind);
@@ -213,41 +199,31 @@ public class EventResourceApiTests(LooperApiFactory factory) : IClassFixture<Loo
         finally
         {
             await _client.DeleteAsync($"/api/agents/{agentId}");
+            await _client.DeleteAsync($"/api/agents/{listenerAgentId}");
             await _client.DeleteAsync($"/api/resources/{raiser}");
-            await _client.DeleteAsync($"/api/resources/{listener}");
         }
     }
 
     [Fact]
-    public async Task An_event_mode_agent_may_rely_on_a_listener_resource_instead_of_typed_topics()
+    public async Task An_event_mode_agent_needs_at_least_one_topic()
     {
-        var listener = await CreateResource("On prd", "EventListener", """{"topic":"prd.approved"}""");
-        try
-        {
-            var without = await PostAgent("No ears", "Event", "  ");
-            Assert.Equal(HttpStatusCode.BadRequest, without.StatusCode);
-            Assert.Contains("something to listen for", await without.Content.ReadAsStringAsync());
+        var without = await PostAgent("No ears", "Event", "  ");
+        Assert.Equal(HttpStatusCode.BadRequest, without.StatusCode);
+        Assert.Contains("something to listen for", await without.Content.ReadAsStringAsync());
 
-            var with = await PostAgent("Has ears", "Event", null, listener);
-            Assert.Equal(HttpStatusCode.Created, with.StatusCode);
-            var id = (await with.Content.ReadFromJsonAsync<IdResponse>(TestJson.Options))!.Id;
-            await _client.DeleteAsync($"/api/agents/{id}");
-        }
-        finally
-        {
-            await _client.DeleteAsync($"/api/resources/{listener}");
-        }
+        var created = await PostAgent("Has ears", "Event", "prd.approved");
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var id = (await created.Content.ReadFromJsonAsync<IdResponse>(TestJson.Options))!.Id;
+        await _client.DeleteAsync($"/api/agents/{id}");
     }
 
     [Fact]
-    public async Task A_listener_resource_starts_a_scheduled_agent_when_its_event_is_raised()
+    public async Task An_event_mode_agent_starts_when_its_topic_is_raised()
     {
-        var listener = await CreateResource("On newsletter sent", "EventListener", """{"topic":"newsletter.sent"}""");
-        var created = await PostAgent("Follow-up loop", "Scheduled", null, listener);
+        var created = await PostAgent("Follow-up loop", "Event", "newsletter.sent");
         var agentId = (await created.Content.ReadFromJsonAsync<IdResponse>(TestJson.Options))!.Id;
         try
         {
-            // Enabled on a schedule; the scheduler poll is an hour away in tests, so only the event can start it.
             (await _client.PostAsJsonAsync($"/api/agents/{agentId}/enabled", new { enabled = true }, TestJson.Options)).EnsureSuccessStatusCode();
 
             var raise = await _client.PostAsJsonAsync("/api/events", new { topic = "newsletter.sent", payload = "42 sent" }, TestJson.Options);
@@ -269,7 +245,6 @@ public class EventResourceApiTests(LooperApiFactory factory) : IClassFixture<Loo
         {
             await _client.PostAsync($"/api/agents/{agentId}/cancel", null);
             await _client.DeleteAsync($"/api/agents/{agentId}");
-            await _client.DeleteAsync($"/api/resources/{listener}");
         }
     }
 }

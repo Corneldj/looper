@@ -16,4 +16,7 @@
   </select>
   <button type="button" class="icon-btn" title="Rename or delete this workflow" aria-label="Rename or delete this workflow" [disabled]="!store.selected()" (click)="edit()"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="M13.5 6.5l3 3"/></svg></button>
   <button type="button" class="icon-btn" title="New workflow" aria-label="New workflow" (click)="create()"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+  <span class="switcher-divider" aria-hidden="true"></span>
+  <button type="button" class="icon-btn import-btn" title="Import a .workflow file" aria-label="Import a .workflow file" (click)="importPackage()"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M4 19h16"/></svg></button>
+  <button type="button" class="icon-btn export-btn" [title]="exportError() || 'Export this workflow as a .workflow file'" aria-label="Export this workflow as a .workflow file" [class.has-error]="exportError()" [disabled]="!store.selected() || exporting()" (click)="exportSelected()"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4"/><path d="M7 9l5-5 5 5"/><path d="M4 19h16"/></svg></button>
 </div>

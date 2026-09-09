@@ -117,6 +117,9 @@ await using (var scope = app.Services.CreateAsyncScope())
         app.Logger.LogWarning("Marked {Count} orphaned run(s) from a previous process as failed", interrupted);
     }
 
+    // The Event Listener resource type was retired: an agent's own "on events" trigger is the listener.
+    await Looper.Api.Infrastructure.LegacyEventListeners.RetireAsync(db, app.Logger, CancellationToken.None);
+
     // Shipped graph resource types, then the user's dynamic modules on top.
     var registry = scope.ServiceProvider.GetRequiredService<Looper.Api.Modules.ResourceModuleRegistry>();
     registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.ContinuousVectorMemoryGraphModule());
@@ -127,7 +130,6 @@ await using (var scope = app.Services.CreateAsyncScope())
     registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.ScriptModule());
     registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.MetricModule());
     registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.EventRaiserModule());
-    registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.EventListenerModule());
 
     var moduleRecords = await db.ResourceModules.AsNoTracking().ToListAsync();
     await registry.ReconcileAsync(moduleRecords, scope.ServiceProvider.GetRequiredService<Looper.Api.Modules.ResourceModuleCompiler>());
