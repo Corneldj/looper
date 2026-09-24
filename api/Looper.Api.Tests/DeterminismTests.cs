@@ -58,8 +58,32 @@ public class ResultInterpretationTests
     [Fact]
     public void Exit_codes_and_the_error_flag_still_fail_with_the_message_when_there_is_one()
     {
-        Assert.Equal("Run failed (exit code 2).", Interpret("""{"result":""}""", exitCode: 2).ErrorMessage);
+        var bare = Interpret("""{"result":"","num_turns":7}""", exitCode: 2).ErrorMessage;
+        Assert.Contains("exit code 2", bare);
+        Assert.Contains("7 turns", bare);
+        Assert.Contains("[cli-json]", bare);
         Assert.Equal("Permission denied.", Interpret("""{"result":"Permission denied.","is_error":true}""").ErrorMessage);
+    }
+
+    // The CLI exits non-zero AND omits "result" for these subtypes. Testing the exit code first
+    // reduced every one of them to a bare "Run failed (exit code 1).", which explains nothing.
+    [Fact]
+    public void A_non_zero_exit_never_masks_the_subtype_that_explains_the_run()
+    {
+        var capped = Interpret(
+            """{"subtype":"error_max_turns","is_error":true,"num_turns":26,"total_cost_usd":1.07}""",
+            exitCode: 1);
+        Assert.False(capped.Success);
+        Assert.Contains("turn limit after 26 turns", capped.ErrorMessage);
+        Assert.DoesNotContain("exit code 1", capped.ErrorMessage);
+        Assert.Equal(26, capped.NumTurns);
+        Assert.Equal(1.07m, capped.CostUsd);
+
+        var crashed = Interpret(
+            """{"subtype":"error_during_execution","is_error":true,"num_turns":4}""",
+            exitCode: 1);
+        Assert.Contains("error_during_execution", crashed.ErrorMessage);
+        Assert.Contains("4 turns", crashed.ErrorMessage);
     }
 }
 
@@ -83,6 +107,8 @@ public class ArchitectDeterminismPromptTests
     [InlineData("customTypeKey \"Metric\"")]
     [InlineData("customTypeKey \"EventRaiser\"")]
     [InlineData("customTypeKey \"Specification\"")]
+    [InlineData("customTypeKey \"File\"")]
+    [InlineData("customTypeKey \"ElevenLabs\"")]
     [InlineData("- UserAction:")]
     public void Every_resource_type_added_this_year_is_documented(string marker)
     {
@@ -146,6 +172,7 @@ public sealed class FailClosedHarnessTests : IDisposable
             new MetricRecorder(new Factory(_options), NullLogger<MetricRecorder>.Instance),
             new ReviewRunner(looperOptions, new ClaudeAuthProvider(new Factory(_options)), NullLogger<ReviewRunner>.Instance),
             new EventDispatcher(NullLogger<EventDispatcher>.Instance),
+            new Looper.Api.Infrastructure.Boards.BoardHarness(new Factory(_options), new StubHttpClientFactory(), NullLogger<Looper.Api.Infrastructure.Boards.BoardHarness>.Instance),
             looperOptions,
             NullLogger<AgentRunCoordinator>.Instance);
     }

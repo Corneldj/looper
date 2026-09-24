@@ -34,6 +34,31 @@ public sealed class BrowseDirectoriesTests : IDisposable
     }
 
     [Fact]
+    public async Task Files_are_listed_only_when_asked_for_with_their_size()
+    {
+        var folders = await _handler.Handle(new BrowseDirectoriesQuery(_root), default);
+        Assert.Empty(folders.Files);
+
+        var listing = await _handler.Handle(new BrowseDirectoriesQuery(_root, IncludeFiles: true), default);
+        var file = Assert.Single(listing.Files);
+        Assert.Equal("not-a-folder.txt", file.Name);
+        Assert.Equal(Path.Combine(_root, "not-a-folder.txt"), file.Path);
+        Assert.Equal(1, file.SizeBytes);
+        Assert.Equal([".hidden", "alpha", "beta"], listing.Directories.Select(d => d.Name)); // folders still listed
+    }
+
+    [Fact]
+    public async Task A_path_that_names_a_file_lists_its_folder_so_the_picker_can_select_it()
+    {
+        var listing = await _handler.Handle(
+            new BrowseDirectoriesQuery(Path.Combine(_root, "not-a-folder.txt"), IncludeFiles: true), default);
+
+        Assert.True(listing.Exists);
+        Assert.Equal(_root, listing.Path);
+        Assert.Contains(listing.Files, f => f.Name == "not-a-folder.txt");
+    }
+
+    [Fact]
     public async Task Exposes_the_parent_for_navigating_up()
     {
         var listing = await _handler.Handle(new BrowseDirectoriesQuery(Path.Combine(_root, "alpha")), default);

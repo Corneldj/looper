@@ -20,13 +20,15 @@ import {
   UserActionDto,
 } from '../../core/models';
 import { formatCost, formatInterval, formatMetric, modelShortName, relativeTime } from '../../core/format';
-import { MapEdge, MapEventEdge, MapLayout, MapNode, bezierPath, computeMapLayout } from './map-layout';
+import { MapEdge, MapEventEdge, MapLayout, MapNode, RES_H, bezierPath, computeMapLayout } from './map-layout';
 import { ResourceEditor } from './resource-editor/resource-editor';
 import { ResourceTypePicker } from './resource-type-picker';
 import { WorkspacesModal } from './resource-editor/workspaces-modal';
 import { ScriptRunModal } from './resource-editor/script-run-modal';
 import { AgentEditor } from './agent-editor/agent-editor';
 import { ArchitectModal } from './architect-modal';
+import { PromptCard } from './cards/prompt-card';
+import { JiraIssueCard } from './cards/jira-issue-card';
 
 type Hover = { kind: 'resource' | 'agent'; id: string } | null;
 
@@ -53,7 +55,10 @@ interface DragState {
  */
 @Component({
   selector: 'app-workbench',
-  imports: [RouterLink, ResourceEditor, ResourceTypePicker, WorkspacesModal, ScriptRunModal, AgentEditor, ArchitectModal],
+  imports: [
+    RouterLink, ResourceEditor, ResourceTypePicker, WorkspacesModal, ScriptRunModal, AgentEditor, ArchitectModal,
+    PromptCard, JiraIssueCard,
+  ],
   templateUrl: './workbench.html',
   styleUrl: './workbench.scss',
   host: {
@@ -262,7 +267,7 @@ export class Workbench implements OnInit, AfterViewInit, OnDestroy {
     this.hover.set(null);
     this.edgeHover.set(null);
     const x1 = node.x + node.w;
-    const y1 = node.y + node.h / 2;
+    const y1 = node.y + RES_H / 2; // the port sits on the header row, also on a tall card
     this.drag.set({
       resourceId: node.data.id,
       resourceName: node.data.name,
@@ -374,6 +379,20 @@ export class Workbench implements OnInit, AfterViewInit, OnDestroy {
     return resource.type === 'WorkspacePool';
   }
 
+  protected isOneOffPrompt(resource: MapResourceDto): boolean {
+    return resource.type === 'Custom' && resource.customTypeKey === 'OneOffPrompt';
+  }
+
+  protected isTimeTracker(resource: MapResourceDto): boolean {
+    return resource.type === 'Custom' && resource.customTypeKey === 'JiraTimeTracking';
+  }
+
+  /** A card wrote its resource: keep the editors' copy current and re-poll so every card shows the saved state. */
+  protected onCardSaved(saved: ResourceDto): void {
+    this.resourcesStore.upsert(saved);
+    this.refreshMap();
+  }
+
   protected graphFor(resourceId: string) {
     return this.resourcesStore.graphs().find(g => g.resourceId === resourceId);
   }
@@ -409,17 +428,28 @@ export class Workbench implements OnInit, AfterViewInit, OnDestroy {
       this.resourcesStore.load();
       return;
     }
+    let def: ResourceTypeDto | null = null;
     if (dto.type === 'Custom') {
-      const def = this.resourcesStore.types().find(t => t.typeKey === dto.customTypeKey);
+      def = this.resourcesStore.types().find(t => t.typeKey === dto.customTypeKey) ?? null;
       if (!def) {
         this.error.set(`The resource type '${dto.customTypeKey}' is no longer installed.`);
         return;
       }
-      this.editorTypeDef.set(def);
-    } else {
-      this.editorTypeDef.set(null);
     }
     this.error.set(null);
+    // Runs rewrite some resources — a one-off prompt clears as a run takes it, answers land in rule
+    // sets — so the editor opens on what is stored now, not on the list loaded with the page.
+    this.api.getResource(dto.id).subscribe({
+      next: fresh => {
+        this.resourcesStore.upsert(fresh);
+        this.openResourceEditor(fresh, def);
+      },
+      error: () => this.openResourceEditor(dto, def),
+    });
+  }
+
+  private openResourceEditor(dto: ResourceDto, def: ResourceTypeDto | null): void {
+    this.editorTypeDef.set(def);
     this.editingResource.set(dto);
     this.editorType.set(dto.type);
   }

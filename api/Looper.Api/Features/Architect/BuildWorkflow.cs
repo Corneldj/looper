@@ -133,7 +133,9 @@ public sealed class BuildWorkflowHandler(
         startInfo.ArgumentList.Add("--output-format");
         startInfo.ArgumentList.Add("json");
         startInfo.ArgumentList.Add("--model");
-        startInfo.ArgumentList.Add("claude-opus-5");
+        startInfo.ArgumentList.Add("claude-opus-5-5");
+        startInfo.ArgumentList.Add("--effort");
+        startInfo.ArgumentList.Add("high");
         startInfo.ArgumentList.Add("--max-turns");
         startInfo.ArgumentList.Add("60");
         startInfo.ArgumentList.Add("--allowedTools");
@@ -233,6 +235,26 @@ public sealed class BuildWorkflowHandler(
            - WorkspacePool: {"rootPath":"/abs/path","provisioning":"blank|git-clone|copy-template","source":"…?","retentionDays":14,"maxWorkspaces":null}
            - Specification (type "Custom", customTypeKey "Specification"): {"specId":"SPEC-1","content":"REQ-1 …\nAC-1 …\nAC-2 …","path":"…?","advisory":false}
              — write real REQ-n/AC-n identifiers; Looper then REQUIRES every deliverable the attached agent registers (a pull request, a published page, a filed report — anything with a link) to cite the AC ids it satisfies, verified against the spec. Attach one to any agent whose deliverable must satisfy written requirements.
+           - File (type "Custom", customTypeKey "File"): {"path":"/abs/path/to/file.md","inline":false,"readOnly":false,"createIfMissing":false}
+             — ONE file by exact path (a FileLocation grants a whole folder). The agent gets the file's folder, the path in
+             $LOOPER_FILE_<NAME> and a prompt section naming it; "inline" puts small text contents straight into the prompt;
+             "readOnly" adds a standing rule never to modify it; a missing file fails the run before the model starts unless
+             "createIfMissing" (for a document the loop builds up over iterations). Use it for a brief, a data file, a maintained report.
+           - ElevenLabs (type "Custom", customTypeKey "ElevenLabs"): {"apiKey":"<from the user — never invent one>","voiceId":"…?","modelId":"eleven_multilingual_v2","outputFolder":"…?","instructions":"…?"}
+             — text-to-speech as a TOOL: the attached agent gets generate_speech(text, fileName?, voiceId?) and list_voices; Looper holds
+             the key, calls ElevenLabs, writes the MP3 and returns the path. Attach one to any agent that produces voice-over, narration
+             or audio ads. The key comes from the user (raise a User Action if you don't have it); it never belongs in a prompt.
+           - AzureDevOpsTickets (type "Custom", customTypeKey "AzureDevOpsTickets"): {"organization":"…","project":"…","pat":"<from the user — never invent one>","assignee":"Assigned to me|Assigned to me or unassigned|Anyone","team":"…?","tag":"…?","workItemTypes":"Bug, User Story?","excludedStates":"…?","ticketIds":"12345, 12346","clearAfterSuccess":false}
+             — the tickets a loop works on, picked from an Azure DevOps board (the user ticks them in the editor). Before every real run
+             Looper reads them fresh into the prompt (description, acceptance criteria, repro steps) and gives the agent get_work_item;
+             a run with no tickets selected is refused. Leave "ticketIds" empty unless the user named the tickets.
+           - JiraTimeTracking (type "Custom", customTypeKey "JiraTimeTracking"): {"baseUrl":"https://jira.…","pat":"<from the user>","issueKey":"PROJ-123","issueSummary":"…","booking":"After every run|After successful runs|Never","activity":"Developing"}
+             — the Jira issue the time goes against: after each real run Looper books the run's time to Tempo (5-minute grid, around
+             existing worklogs, tagged with the first selected ticket). Only when the user asked for time tracking; never guess the
+             issue — leave "issueKey" empty and the user picks it on the resource's workbench card.
+           - OneOffPrompt (type "Custom", customTypeKey "OneOffPrompt"): {"text":""} — extra instructions for the next run only: the
+             next real run takes the text into its prompt and clears it. Create it empty; the user types it in the box on its
+             workbench card before a run.
            - Script (type "Custom", customTypeKey "Script"): {"language":"python|bash","code":"<the full script>","trigger":"before|after","args":"","timeoutSeconds":120,"workingDirectory":"…?"}
              — a runnable script for the deterministic parts of a loop, always run by Looper (never by the model): "before" = before every
              iteration, stdout handed to the agent as context (fetch inputs, snapshot state); "after" = after every iteration as a gate
@@ -250,7 +272,7 @@ public sealed class BuildWorkflowHandler(
            - PatToken ("API key / secret"): {"envVar":"MAILCHIMP_API_KEY","value":"<placeholder>"} / AzureConnection — credential configs: create ONLY with placeholder values and say so in your report; never invent real secrets.
            - Dynamic types: type "Custom" + customTypeKey "<TypeKey>"; configJson keys = the type's field keys.
         3. Create an agent (a loop started on a schedule OR by events — one or the other):
-           curl -s -X POST {{apiUrl}}/api/agents -d '{"workflowId":"{{workflowId ?? Domain.Workflow.DefaultId}}","name":"…","description":"…","prompt":"<the loop prompt>","model":"claude-opus-5|claude-sonnet-5|claude-haiku-4-5","effort":"Low|Medium|High","intervalMinutes":60,"triggerMode":"Scheduled","triggerTopics":null,"maxTurns":25,"maxBudgetUsd":null,"workingDirectory":null,"allowedTools":null,"bypassPermissions":true,"dryRun":true,"autonomyLevel":2,"resourceIds":["<resource ids to attach>"]}'
+           curl -s -X POST {{apiUrl}}/api/agents -d '{"workflowId":"{{workflowId ?? Domain.Workflow.DefaultId}}","name":"…","description":"…","prompt":"<the loop prompt>","model":"claude-opus-5-5|claude-sonnet-5|claude-haiku-4-5","effort":"Low|Medium|High","intervalMinutes":60,"triggerMode":"Scheduled","triggerTopics":null,"maxTurns":25,"maxBudgetUsd":null,"workingDirectory":null,"allowedTools":null,"bypassPermissions":true,"dryRun":true,"autonomyLevel":2,"resourceIds":["<resource ids to attach>"]}'
            For an event-driven loop use "triggerMode":"Event" with "triggerTopics":"topic.one\ntopic.prefix.*" — the agent's trigger
            IS its subscription (every finished run raises agent.<name-slug>.succeeded/.failed; graph maintenance raises
            graph.<name-slug>.needs-curation). An event-mode agent has no interval.

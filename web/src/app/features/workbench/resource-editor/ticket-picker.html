@@ -1,0 +1,163 @@
+<div class="form-row">
+  <div class="field">
+    <label>{{ field('organization')?.label ?? 'Organization' }}<span class="req"> *</span></label>
+    <input
+      class="input"
+      [placeholder]="field('organization')?.placeholder ?? ''"
+      [ngModel]="str('organization')"
+      (ngModelChange)="set('organization', $event)"
+    />
+  </div>
+  <div class="field">
+    <label>{{ field('project')?.label ?? 'Project' }}<span class="req"> *</span></label>
+    <input
+      class="input"
+      [placeholder]="field('project')?.placeholder ?? ''"
+      [ngModel]="str('project')"
+      (ngModelChange)="set('project', $event)"
+    />
+  </div>
+</div>
+<span class="hint row-hint">{{ field('organization')?.hint }}</span>
+
+<div class="field">
+  <label>{{ field('pat')?.label ?? 'Personal access token' }}<span class="req"> *</span></label>
+  <input
+    class="input"
+    type="password"
+    autocomplete="new-password"
+    [ngModel]="str('pat')"
+    (ngModelChange)="set('pat', $event)"
+  />
+  <span class="hint">{{ str('pat') === secretSentinel ? 'Leave unchanged to keep the stored token.' : field('pat')?.hint }}</span>
+</div>
+
+<details class="filters" [open]="!resourceId()">
+  <summary>Board filters</summary>
+  <div class="filters-body">
+    <div class="form-row">
+      <div class="field">
+        <label>{{ field('assignee')?.label ?? 'Show tickets' }}</label>
+        <!-- Empty means the first option (assigned to me), so an untouched form shows it too. -->
+        <select
+          class="select"
+          [ngModel]="str('assignee') || (field('assignee')?.options?.[0] ?? '')"
+          (ngModelChange)="set('assignee', $event)"
+        >
+          @for (option of field('assignee')?.options ?? []; track option) {
+            <option [value]="option">{{ option }}</option>
+          }
+        </select>
+      </div>
+      <div class="field">
+        <label>{{ field('team')?.label ?? 'Team' }} <span class="optional">optional</span></label>
+        <input class="input" [ngModel]="str('team')" (ngModelChange)="set('team', $event)" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>{{ field('tag')?.label ?? 'Tag' }} <span class="optional">optional</span></label>
+        <input class="input" [ngModel]="str('tag')" (ngModelChange)="set('tag', $event)" />
+      </div>
+      <div class="field">
+        <label>{{ field('workItemTypes')?.label ?? 'Work item types' }} <span class="optional">optional</span></label>
+        <input class="input" placeholder="Bug, User Story" [ngModel]="str('workItemTypes')" (ngModelChange)="set('workItemTypes', $event)" />
+      </div>
+    </div>
+    <div class="field">
+      <label>{{ field('excludedStates')?.label ?? 'Hidden states' }}</label>
+      <input
+        class="input"
+        [placeholder]="field('excludedStates')?.placeholder ?? ''"
+        [ngModel]="str('excludedStates')"
+        (ngModelChange)="set('excludedStates', $event)"
+      />
+      <span class="hint">{{ field('excludedStates')?.hint }}</span>
+    </div>
+  </div>
+</details>
+
+<div class="field">
+  <div class="board-toolbar">
+    <label>Tickets to work on</label>
+    <input
+      class="input board-search"
+      placeholder="Search id, title, tags…"
+      [disabled]="!tickets()"
+      [ngModel]="search()"
+      (ngModelChange)="search.set($event)"
+    />
+    <button type="button" class="btn btn-soft btn-sm" [disabled]="!canRetrieve() || loading()" (click)="retrieve()">
+      @if (loading()) {
+        <span class="pulse-dot"></span> Retrieving…
+      } @else {
+        ↻ {{ tickets() ? 'Refresh' : 'Retrieve tickets' }}
+      }
+    </button>
+  </div>
+
+  @if (error(); as message) {
+    <p class="board-error">{{ message }}</p>
+  }
+
+  @if (tickets(); as all) {
+    <div class="ticket-list">
+      @for (ticket of visible(); track ticket.id) {
+        <label class="ticket" [class.selected]="isSelected(ticket.id)">
+          <input type="checkbox" [checked]="isSelected(ticket.id)" (change)="toggle(ticket.id)" />
+          <span class="ticket-text">
+            <span class="ticket-title"><span class="mono">#{{ ticket.id }}</span> {{ ticket.title }}</span>
+            <span class="ticket-meta">
+              {{ ticket.type }} · {{ ticket.state }}
+              @if (ticket.assignedTo) {
+                · {{ ticket.assignedTo }}
+              }
+              @if (!ticket.listed) {
+                <span class="chip chip-amber">not on the board</span>
+              }
+            </span>
+          </span>
+          <a class="ticket-link" [href]="ticket.url" target="_blank" rel="noopener" title="Open in Azure DevOps">↗</a>
+        </label>
+      } @empty {
+        <p class="board-empty">{{ all.length ? 'No ticket matches the search.' : 'No open tickets match the board filters.' }}</p>
+      }
+    </div>
+    <span class="hint">{{ status() }}</span>
+    @if (unknownIds().length) {
+      <span class="hint warn">
+        Selected but not found: {{ unknownIds().join(', ') }} — deleted, moved, or not visible to the token. Untick them in the field below.
+      </span>
+    }
+  } @else if (!loading()) {
+    <p class="board-empty">
+      {{ canRetrieve() ? 'Retrieve the board to pick the tickets to work on.' : 'Fill in the organization, project and token, then retrieve the board.' }}
+    </p>
+  }
+</div>
+
+<div class="field">
+  <label>{{ field('ticketIds')?.label ?? 'Selected tickets' }}</label>
+  <input
+    class="input mono"
+    [placeholder]="field('ticketIds')?.placeholder ?? ''"
+    [ngModel]="str('ticketIds')"
+    (ngModelChange)="set('ticketIds', $event)"
+  />
+  <span class="hint">{{ field('ticketIds')?.hint }}</span>
+</div>
+
+<label class="switch-row">
+  <span class="switch">
+    <input
+      type="checkbox"
+      [checked]="values()['clearAfterSuccess'] === true"
+      (change)="set('clearAfterSuccess', $any($event.target).checked)"
+    />
+    <span class="track"></span>
+  </span>
+  <span class="switch-text">
+    {{ field('clearAfterSuccess')?.label ?? 'Clear the selection after a successful run' }}
+    <span class="switch-hint">{{ field('clearAfterSuccess')?.hint }}</span>
+  </span>
+</label>

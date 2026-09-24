@@ -322,6 +322,7 @@ public sealed class ScriptHarnessTests : IDisposable
             new MetricRecorder(new Factory(_options), NullLogger<MetricRecorder>.Instance),
             new ReviewRunner(looperOptions, new ClaudeAuthProvider(new Factory(_options)), NullLogger<ReviewRunner>.Instance),
             new EventDispatcher(NullLogger<EventDispatcher>.Instance),
+            new Looper.Api.Infrastructure.Boards.BoardHarness(new Factory(_options), new StubHttpClientFactory(), NullLogger<Looper.Api.Infrastructure.Boards.BoardHarness>.Instance),
             looperOptions,
             NullLogger<AgentRunCoordinator>.Instance);
     }
@@ -603,6 +604,7 @@ public class ScriptAssistTests(FakeClaudeApiFactory factory) : IClassFixture<Fak
         // The CLI was driven the way the agent runner drives it: edits auto-accepted, interpreter allowed.
         var args = await File.ReadAllTextAsync(Path.Combine(factory.Dir, "assist-args.txt"));
         Assert.Contains("acceptEdits", args);
+        Assert.Contains("--model\nclaude-opus-5-5\n--effort\nhigh\n", args);
         Assert.Contains("Bash(python3:*)", args);
         Assert.Contains("greeter.py", args);
         Assert.Contains("Add a greeting line at the end.", args);

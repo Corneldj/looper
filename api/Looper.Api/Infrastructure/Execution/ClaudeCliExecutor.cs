@@ -74,7 +74,7 @@ public sealed class ClaudeCliExecutor(
         };
 
         BuildArguments(startInfo.ArgumentList, agent, resources, additionalDirectories, contributions, context.FixInstructions, context.TriggerEvents, memoryContext, context.ScriptOutputs,
-            Mcp.LooperTools.ServerUrl(options.Value.PublicUrl, context.RunId));
+            Mcp.LooperTools.ServerUrl(options.Value.PublicUrl, context.RunId), context.DefaultMaxBudgetUsd, context.Briefing);
 
         foreach (var (key, value) in AgentWorkspace.ResolveEnvironment(resources))
         {
@@ -107,7 +107,10 @@ public sealed class ClaudeCliExecutor(
             return Failure(ex.Message, 0);
         }
 
-        await log("info", $"Launching Claude Agent SDK run: model={agent.Model}, effort={agent.Effort}, auth={auth}, cwd={workingDirectory}");
+        var budgetNote = (agent.MaxBudgetUsd ?? context.DefaultMaxBudgetUsd) is { } cap and > 0
+            ? $"${cap:0.##}{(agent.MaxBudgetUsd is null ? " (Settings default)" : "")}"
+            : "none";
+        await log("info", $"Launching Claude Agent SDK run: model={agent.Model}, effort={agent.Effort}, auth={auth}, budget={budgetNote}, cwd={workingDirectory}");
         await log("info", $"claude {string.Join(' ', RedactedArguments(startInfo.ArgumentList, agent))}");
 
         var stopwatch = Stopwatch.StartNew();
@@ -150,8 +153,13 @@ public sealed class ClaudeCliExecutor(
                 await log("warn", $"[stderr] {line.TrimEnd()}");
             }
         }
+        else if (process.ExitCode != 0)
+        {
+            await log("warn", $"[stderr] (empty) — the CLI exited {process.ExitCode} without writing to stderr; "
+                              + "the reason it stopped is in the [cli-json] line below.");
+        }
 
-        return ParseResult(stdout, process.ExitCode, stopwatch.ElapsedMilliseconds, log).Result;
+        return await ParseResult(stdout, process.ExitCode, stopwatch.ElapsedMilliseconds, log);
     }
 
     /// <summary>
@@ -192,10 +200,11 @@ public sealed class ClaudeCliExecutor(
     private void BuildArguments(ICollection<string> args, LoopAgent agent, IReadOnlyList<Resource> resources,
         IReadOnlyList<string> additionalDirectories, IReadOnlyList<ResourceContribution> contributions,
         string? fixInstructions, string? triggerEvents = null,
-        IReadOnlyList<string>? memoryContext = null, string? scriptOutputs = null, string? looperServerUrl = null)
+        IReadOnlyList<string>? memoryContext = null, string? scriptOutputs = null, string? looperServerUrl = null,
+        decimal? defaultMaxBudgetUsd = null, IReadOnlyList<string>? briefing = null)
     {
         args.Add("-p");
-        args.Add(BuildPrompt(agent, resources, contributions, fixInstructions, triggerEvents, memoryContext, scriptOutputs));
+        args.Add(BuildPrompt(agent, resources, contributions, fixInstructions, triggerEvents, memoryContext, scriptOutputs, briefing));
         args.Add("--output-format");
         args.Add("json");
         args.Add("--model");
@@ -205,7 +214,8 @@ public sealed class ClaudeCliExecutor(
         args.Add("--max-turns");
         args.Add(agent.MaxTurns.ToString());
 
-        if (agent.MaxBudgetUsd is { } budget and > 0)
+        // The agent's own cap wins; the Settings default only bounds a run that set none.
+        if ((agent.MaxBudgetUsd ?? defaultMaxBudgetUsd) is { } budget and > 0)
         {
             args.Add("--max-budget-usd");
             args.Add(budget.ToString(System.Globalization.CultureInfo.InvariantCulture));
@@ -255,7 +265,8 @@ public sealed class ClaudeCliExecutor(
     internal static string BuildPrompt(LoopAgent agent, IReadOnlyList<Resource> resources,
         IReadOnlyList<ResourceContribution> contributions, string? fixInstructions = null,
         string? triggerEvents = null,
-        IReadOnlyList<string>? memoryContext = null, string? scriptOutputs = null)
+        IReadOnlyList<string>? memoryContext = null, string? scriptOutputs = null,
+        IReadOnlyList<string>? briefing = null)
     {
         var ragSections = resources
             .Where(r => r.Type == ResourceType.Rag)
@@ -282,6 +293,12 @@ public sealed class ClaudeCliExecutor(
         if (memoryContext is { Count: > 0 })
         {
             extraSections.InsertRange(0, memoryContext);
+        }
+        // The work itself — the selected tickets, then the operator's one-off instructions — leads,
+        // right after whatever triggered the run.
+        if (briefing is { Count: > 0 })
+        {
+            extraSections.InsertRange(0, briefing.Where(s => !string.IsNullOrWhiteSpace(s)));
         }
         if (!string.IsNullOrWhiteSpace(triggerEvents))
         {
@@ -481,6 +498,8 @@ public sealed class ClaudeCliExecutor(
         var outcome = InterpretResult(document.RootElement, exitCode, elapsedMs);
         if (!outcome.Success)
         {
+            // The raw result object is the only record of why the CLI stopped; stdout is not kept.
+            await log("warn", $"[cli-json] {Truncate(document.RootElement.GetRawText(), 4000)}");
             await log("error", outcome.ErrorMessage!);
         }
         else
@@ -520,22 +539,31 @@ public sealed class ClaudeCliExecutor(
 
         var lastMessage = string.IsNullOrWhiteSpace(resultText) ? "" : $" Last message: {Truncate(resultText.Trim(), 2000)}";
         string? failure = null;
-        if (exitCode != 0)
-        {
-            failure = string.IsNullOrWhiteSpace(resultText) ? $"Run failed (exit code {exitCode})." : resultText.Trim();
-        }
-        else if (isErrorFlag)
-        {
-            failure = string.IsNullOrWhiteSpace(resultText) ? "Run failed: the CLI reported an error without a message." : resultText.Trim();
-        }
-        else if (subtype.StartsWith("error", StringComparison.OrdinalIgnoreCase))
+        // Subtype first: the CLI also exits non-zero for error_max_turns and error_during_execution,
+        // so testing the exit code before the subtype would collapse every one of these into a bare
+        // "exit code 1" and discard the only thing that explains the run.
+        if (subtype.StartsWith("error", StringComparison.OrdinalIgnoreCase))
         {
             failure = subtype switch
             {
                 "error_max_turns" => $"Stopped at the turn limit after {numTurns} turns before finishing the task — raise max turns or narrow the prompt.",
                 "error_max_budget_usd" or "error_max_budget" => "Stopped at the budget cap before finishing the task.",
+                "error_during_execution" => $"The CLI stopped part-way through the run with an internal error ('error_during_execution') after {numTurns} turns.",
                 _ => $"The CLI ended with '{subtype}' instead of a result."
             } + lastMessage;
+        }
+        else if (isErrorFlag)
+        {
+            failure = string.IsNullOrWhiteSpace(resultText)
+                ? $"Run failed: the CLI reported an error without a message (exit code {exitCode}, {numTurns} turns)."
+                : resultText.Trim();
+        }
+        else if (exitCode != 0)
+        {
+            // No subtype and no message: all we honestly know is the exit code, so say where to look.
+            failure = string.IsNullOrWhiteSpace(resultText)
+                ? $"Run failed (exit code {exitCode}) after {numTurns} turns without reporting a reason — see the [stderr] and [cli-json] lines in this run's log."
+                : resultText.Trim();
         }
         else if (string.IsNullOrWhiteSpace(resultText))
         {

@@ -1,6 +1,7 @@
 import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../../core/api.service';
+import { apiErrorMessage } from '../../../core/format';
 import { ResourcesStore, WorkflowsStore } from '../../../core/stores';
 import { FolderPicker } from '../../../shared/folder-picker/folder-picker';
 import { EventPicker } from '../../../shared/event-picker/event-picker';
@@ -72,6 +73,8 @@ export class AgentEditor implements OnInit {
   protected readonly models = MODELS;
   protected readonly effortLevels = EFFORT_LEVELS;
   protected readonly autonomyLevels = AUTONOMY_LEVELS;
+  /** Matches the API's MaxTurns validator; the field shows the cap rather than failing on save. */
+  protected readonly maxTurnsLimit = 250;
   protected readonly intervalPresets = [
     { label: '15m', minutes: 15 },
     { label: '1h', minutes: 60 },
@@ -143,6 +146,7 @@ export class AgentEditor implements OnInit {
   protected get canSave(): boolean {
     if (this.form.name.trim().length === 0 || this.form.prompt.trim().length === 0) return false;
     if (this.form.triggerMode === 'Event' && this.form.triggerTopics.trim().length === 0) return false;
+    if (this.form.maxTurns != null && this.form.maxTurns > this.maxTurnsLimit) return false;
     return true;
   }
 
@@ -179,9 +183,12 @@ export class AgentEditor implements OnInit {
 
     request$.subscribe({
       next: () => this.closed.emit(true),
-      error: () => {
+      error: err => {
         this.saving.set(false);
-        this.error.set('Saving failed — check that the API is running and try again.');
+        // The API rejects an out-of-range field with the field and its limit; show that, not a guess.
+        this.error.set(
+          apiErrorMessage(err, 'Saving failed — check that the API is running and try again.'),
+        );
       },
     });
   }

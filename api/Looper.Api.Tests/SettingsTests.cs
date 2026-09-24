@@ -72,7 +72,8 @@ public class SettingsApiTests(LooperApiFactory factory) : IClassFixture<LooperAp
     private readonly HttpClient _client = factory.CreateClient();
     private const string Key = "sk-ant-api03-settings-test-key-0000wxyz";
 
-    private sealed record SettingsResponse(string ClaudeAuthMode, bool HasApiKey, string? ApiKeyHint, DateTime? UpdatedAtUtc);
+    private sealed record SettingsResponse(string ClaudeAuthMode, bool HasApiKey, string? ApiKeyHint,
+        int RunTimeoutMinutes, decimal? DefaultMaxBudgetUsd, DateTime? UpdatedAtUtc);
 
     [Fact]
     public async Task Settings_round_trip_masks_the_key_and_refuses_api_key_mode_without_a_key()
@@ -125,6 +126,45 @@ public class SettingsApiTests(LooperApiFactory factory) : IClassFixture<LooperAp
             .Content.ReadFromJsonAsync<SettingsResponse>(TestJson.Options);
         Assert.Equal("Subscription", parked!.ClaudeAuthMode);
         Assert.True(parked.HasApiKey);
+    }
+
+    [Fact]
+    public async Task Run_limits_round_trip_are_validated_and_survive_unrelated_saves()
+    {
+        var initial = await _client.GetFromJsonAsync<SettingsResponse>("/api/settings", TestJson.Options);
+        Assert.True(initial!.RunTimeoutMinutes >= 0);
+        Assert.Null(initial.DefaultMaxBudgetUsd);
+
+        // Out of range is refused with the range in the message; so is a zero budget.
+        var tooLong = await _client.PutAsJsonAsync("/api/settings",
+            new { claudeAuthMode = "Subscription", runTimeoutMinutes = RunLimits.MaxTimeoutMinutes + 1 }, TestJson.Options);
+        Assert.Equal(HttpStatusCode.BadRequest, tooLong.StatusCode);
+        Assert.Contains(RunLimits.MaxTimeoutMinutes.ToString(), await tooLong.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.BadRequest, (await _client.PutAsJsonAsync("/api/settings",
+            new { claudeAuthMode = "Subscription", runTimeoutMinutes = -1 }, TestJson.Options)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await _client.PutAsJsonAsync("/api/settings",
+            new { claudeAuthMode = "Subscription", defaultMaxBudgetUsd = 0 }, TestJson.Options)).StatusCode);
+
+        // Zero is "no limit"; the budget keeps its precision.
+        var saved = await (await _client.PutAsJsonAsync("/api/settings",
+                new { claudeAuthMode = "Subscription", runTimeoutMinutes = 0, defaultMaxBudgetUsd = 2.5 }, TestJson.Options))
+            .Content.ReadFromJsonAsync<SettingsResponse>(TestJson.Options);
+        Assert.Equal(0, saved!.RunTimeoutMinutes);
+        Assert.Equal(2.5m, saved.DefaultMaxBudgetUsd);
+
+        // A save that only touches credentials leaves the limits alone.
+        var untouched = await (await _client.PutAsJsonAsync("/api/settings",
+                new { claudeAuthMode = "Subscription" }, TestJson.Options))
+            .Content.ReadFromJsonAsync<SettingsResponse>(TestJson.Options);
+        Assert.Equal(0, untouched!.RunTimeoutMinutes);
+        Assert.Equal(2.5m, untouched.DefaultMaxBudgetUsd);
+
+        // Clearing removes the default budget; the time limit goes back to a number.
+        var cleared = await (await _client.PutAsJsonAsync("/api/settings",
+                new { claudeAuthMode = "Subscription", runTimeoutMinutes = 240, clearDefaultMaxBudget = true }, TestJson.Options))
+            .Content.ReadFromJsonAsync<SettingsResponse>(TestJson.Options);
+        Assert.Equal(240, cleared!.RunTimeoutMinutes);
+        Assert.Null(cleared.DefaultMaxBudgetUsd);
     }
 }
 
@@ -179,6 +219,7 @@ public sealed class ClaudeAuthHarnessTests : IDisposable
             new MetricRecorder(new Factory(_options), NullLogger<MetricRecorder>.Instance),
             new ReviewRunner(looperOptions, auth, NullLogger<ReviewRunner>.Instance),
             new EventDispatcher(NullLogger<EventDispatcher>.Instance),
+            new Looper.Api.Infrastructure.Boards.BoardHarness(new Factory(_options), new StubHttpClientFactory(), NullLogger<Looper.Api.Infrastructure.Boards.BoardHarness>.Instance),
             looperOptions,
             NullLogger<AgentRunCoordinator>.Instance);
     }

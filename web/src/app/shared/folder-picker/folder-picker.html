@@ -1,7 +1,7 @@
 <div class="modal-backdrop" (keydown.escape)="onEscape($event)">
   <div class="modal picker-modal">
     <div class="modal-header">
-      <h2>Choose a folder</h2>
+      <h2>{{ isFileMode() ? 'Choose a file' : 'Choose a folder' }}</h2>
       <button class="icon-btn" title="Close" (click)="cancel()">✕</button>
     </div>
 
@@ -9,10 +9,10 @@
       <input
         #pathBox
         class="input mono"
-        aria-label="Folder path"
+        [attr.aria-label]="isFileMode() ? 'File path' : 'Folder path'"
         [(ngModel)]="pathInput"
         (keydown.enter)="goToTypedPath()"
-        placeholder="/home/you/projects"
+        [placeholder]="isFileMode() ? '/home/you/projects/brief.md' : '/home/you/projects'"
       />
       <button class="btn btn-ghost btn-sm" (click)="goToTypedPath()">Go</button>
     </div>
@@ -63,8 +63,26 @@
               <span class="dir-name">{{ dir.name }}</span>
             </button>
           }
-          @if (visibleDirectories().length === 0) {
-            <p class="no-subfolders">No sub-folders here — choose this folder or go back up.</p>
+          @if (isFileMode()) {
+            @for (file of visibleFiles(); track file.path) {
+              <button
+                type="button"
+                class="dir-row file-row"
+                [class.selected]="file.path === selectedFile()"
+                [class.hidden-dir]="file.isHidden"
+                (click)="selectFile(file)"
+                (dblclick)="chooseFile(file)"
+              >
+                <span class="dir-icon">📄</span>
+                <span class="dir-name">{{ file.name }}</span>
+                <span class="file-size">{{ formatSize(file.sizeBytes) }}</span>
+              </button>
+            }
+          }
+          @if (visibleDirectories().length === 0 && visibleFiles().length === 0) {
+            <p class="no-subfolders">
+              {{ isFileMode() ? 'Nothing here — open another folder or go back up.' : 'No sub-folders here — choose this folder or go back up.' }}
+            </p>
           }
         }
       } @else {
@@ -82,10 +100,13 @@
           <span>Show hidden ({{ hiddenCount() }})</span>
         </label>
       }
+      @if (isFileMode() && selectedFileName(); as name) {
+        <span class="selection mono" [title]="selectedFile() ?? ''">📄 {{ name }}</span>
+      }
       <div class="picker-actions">
         <button class="btn btn-ghost" (click)="cancel()">Cancel</button>
-        <button class="btn btn-primary" [disabled]="!listing()?.exists" (click)="choose()">
-          Use this folder
+        <button class="btn btn-primary" [disabled]="!canChoose()" (click)="choose()">
+          {{ isFileMode() ? 'Use this file' : 'Use this folder' }}
         </button>
       </div>
     </div>

@@ -97,14 +97,18 @@
         </div>
         <div class="field">
           <label for="agent-max-turns">Max turns</label>
-          <input id="agent-max-turns" class="input num" type="number" min="1" [(ngModel)]="form.maxTurns" />
+          <input id="agent-max-turns" class="input num" type="number" min="1" [max]="maxTurnsLimit"
+                 [(ngModel)]="form.maxTurns" />
+          <span class="hint">1–{{ maxTurnsLimit }}. A run that hits the cap fails instead of finishing.</span>
         </div>
       </div>
       }
       @if (form.triggerMode === 'Event') {
         <div class="field">
           <label for="agent-max-turns-e">Max turns</label>
-          <input id="agent-max-turns-e" class="input num" type="number" min="1" [(ngModel)]="form.maxTurns" />
+          <input id="agent-max-turns-e" class="input num" type="number" min="1" [max]="maxTurnsLimit"
+                 [(ngModel)]="form.maxTurns" />
+          <span class="hint">1–{{ maxTurnsLimit }}. A run that hits the cap fails instead of finishing.</span>
         </div>
       }
     </section>

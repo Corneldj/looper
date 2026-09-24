@@ -7,8 +7,19 @@ import { SettingsDto } from '../../core/models';
 import { SettingsModal } from './settings-modal';
 
 function settings(overrides: Partial<SettingsDto> = {}): SettingsDto {
-  return { claudeAuthMode: 'Subscription', hasApiKey: false, apiKeyHint: null, updatedAtUtc: null, ...overrides };
+  return {
+    claudeAuthMode: 'Subscription',
+    hasApiKey: false,
+    apiKeyHint: null,
+    runTimeoutMinutes: 240,
+    defaultMaxBudgetUsd: null,
+    updatedAtUtc: null,
+    ...overrides,
+  };
 }
+
+/** What a save sends for the limits when the user left them as loaded (no budget stored). */
+const untouchedLimits = { runTimeoutMinutes: 240, defaultMaxBudgetUsd: null, clearDefaultMaxBudget: false };
 
 describe('SettingsModal', () => {
   let http: HttpTestingController;
@@ -57,7 +68,7 @@ describe('SettingsModal', () => {
     (element.querySelector('.btn-primary') as HTMLButtonElement).click();
 
     const put = http.expectOne(r => r.method === 'PUT' && r.url === `${API_BASE}/settings`);
-    expect(put.request.body).toEqual({ claudeAuthMode: 'ApiKey', apiKey: 'sk-ant-api03-brand-new-key-0000zzzz', clearApiKey: false });
+    expect(put.request.body).toEqual({ claudeAuthMode: 'ApiKey', apiKey: 'sk-ant-api03-brand-new-key-0000zzzz', clearApiKey: false, ...untouchedLimits });
     put.flush(settings({ claudeAuthMode: 'ApiKey', hasApiKey: true, apiKeyHint: '…zzzz' }));
     fixture.detectChanges();
 
@@ -73,7 +84,7 @@ describe('SettingsModal', () => {
     // Saving with nothing touched sends no key: the stored one stays.
     (element.querySelector('.btn-primary') as HTMLButtonElement).click();
     const untouched = http.expectOne(r => r.method === 'PUT' && r.url === `${API_BASE}/settings`);
-    expect(untouched.request.body).toEqual({ claudeAuthMode: 'ApiKey', apiKey: null, clearApiKey: false });
+    expect(untouched.request.body).toEqual({ claudeAuthMode: 'ApiKey', apiKey: null, clearApiKey: false, ...untouchedLimits });
     untouched.flush(settings({ claudeAuthMode: 'ApiKey', hasApiKey: true, apiKeyHint: '…abcd' }));
     fixture.detectChanges();
 
@@ -86,7 +97,7 @@ describe('SettingsModal', () => {
     (element.querySelector('.btn-primary') as HTMLButtonElement).click();
 
     const cleared = http.expectOne(r => r.method === 'PUT' && r.url === `${API_BASE}/settings`);
-    expect(cleared.request.body).toEqual({ claudeAuthMode: 'Subscription', apiKey: null, clearApiKey: true });
+    expect(cleared.request.body).toEqual({ claudeAuthMode: 'Subscription', apiKey: null, clearApiKey: true, ...untouchedLimits });
     cleared.flush(settings());
     fixture.detectChanges();
     expect(TestBed.inject(SettingsStore).usingApiKey()).toBeFalse();
@@ -105,5 +116,41 @@ describe('SettingsModal', () => {
 
     expect(element.querySelector('.save-error')?.textContent).toContain('Paste an Anthropic API key');
     expect(closed).toBe(0);
+  });
+
+  it('sends the run limits, blocks a time limit past the cap, and clears an emptied budget explicitly', () => {
+    const { fixture } = open(settings({ runTimeoutMinutes: 30, defaultMaxBudgetUsd: 3 }));
+    const element: HTMLElement = fixture.nativeElement;
+    const minutes = element.querySelector('#run-timeout') as HTMLInputElement;
+    const budget = element.querySelector('#default-budget') as HTMLInputElement;
+    const save = element.querySelector('.btn-primary') as HTMLButtonElement;
+
+    // Past what a timer accepts: Save is disabled here rather than refused by the API.
+    minutes.value = '99999';
+    minutes.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(save.disabled).withContext('over the cap').toBeTrue();
+
+    // Zero is "no limit". Emptying the stored budget must reach the API as a clear, not a null.
+    minutes.value = '0';
+    minutes.dispatchEvent(new Event('input'));
+    budget.value = '';
+    budget.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(save.disabled).toBeFalse();
+    save.click();
+
+    const put = http.expectOne(r => r.method === 'PUT' && r.url === `${API_BASE}/settings`);
+    expect(put.request.body).toEqual({
+      claudeAuthMode: 'Subscription',
+      apiKey: null,
+      clearApiKey: false,
+      runTimeoutMinutes: 0,
+      defaultMaxBudgetUsd: null,
+      clearDefaultMaxBudget: true,
+    });
+    put.flush(settings({ runTimeoutMinutes: 0 }));
+    fixture.detectChanges();
+    expect(TestBed.inject(SettingsStore).settings()?.runTimeoutMinutes).toBe(0);
   });
 });

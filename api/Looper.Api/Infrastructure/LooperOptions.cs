@@ -10,8 +10,11 @@ public class LooperOptions
     /// <summary>Shell command the "Install for me" button runs — the official Claude Code installer.</summary>
     public string ClaudeInstallCommand { get; set; } = "curl -fsSL https://claude.ai/install.sh | bash";
 
-    /// <summary>Hard wall-clock limit per run.</summary>
-    public int RunTimeoutMinutes { get; set; } = 30;
+    /// <summary>
+    /// Fallback wall-clock limit per run, in minutes, for when Settings holds none; 0 (or less)
+    /// means no limit. Values above <see cref="Execution.RunLimits.MaxTimeoutMinutes"/> are clamped to it.
+    /// </summary>
+    public int RunTimeoutMinutes { get; set; } = 240;
 
     /// <summary>Base URL agents use to report PRs and escalations back to Looper during a run.</summary>
     public string PublicUrl { get; set; } = "http://localhost:5210";

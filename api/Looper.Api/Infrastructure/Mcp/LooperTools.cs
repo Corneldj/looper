@@ -3,11 +3,14 @@ using System.Text.Json.Nodes;
 using FluentValidation;
 using Looper.Api.Common.Cqrs;
 using Looper.Api.Domain;
+using Looper.Api.Features.Audio;
+using Looper.Api.Features.Boards;
 using Looper.Api.Features.Delivery;
 using Looper.Api.Features.Events;
 using Looper.Api.Features.Metrics;
 using Looper.Api.Features.UserActions;
 using Looper.Api.Features.Workspaces;
+using Looper.Api.Infrastructure.Audio;
 using Looper.Api.Infrastructure.Execution;
 using Looper.Api.Modules.BuiltIn;
 
@@ -64,6 +67,16 @@ public static class LooperTools
             tools.Add(FinishWorkspace());
             tools.Add(ListWorkspaces(pools));
         }
+
+        var voices = ElevenLabsResources.Attached(resources);
+        if (voices.Count > 0)
+        {
+            tools.Add(GenerateSpeech(voices));
+            tools.Add(ListVoices(voices));
+        }
+
+        var boards = AzureDevOpsTicketsResources.Attached(resources);
+        if (boards.Count > 0) tools.Add(GetWorkItem(boards));
 
         return tools;
     }
@@ -215,6 +228,92 @@ public static class LooperTools
             });
     }
 
+    private static LooperTool GenerateSpeech(IReadOnlyList<Resource> voices)
+    {
+        var lines = voices.Select(r =>
+        {
+            var config = ElevenLabsResources.Parse(new Modules.ResourceModuleContext(r.ConfigJson));
+            return $"\"{r.Name}\": voice {config.VoiceId}, model {config.ModelId}, output {config.OutputFolder ?? "<working directory>/audio"}";
+        });
+        var description =
+            "Turn text into speech through ElevenLabs and get back the path of the MP3 Looper wrote — you never handle the API key. " +
+            $"At most {ElevenLabsClient.MaxCharacters:N0} characters per call: one line or paragraph per file is the reliable pattern, " +
+            "and the file names you give (e.g. \"01_hook\") keep them in order. A name that already exists gets -2, -3, …; the " +
+            "returned path is authoritative. Resources on this run: " + string.Join("; ", lines) + ".";
+        var resource = Str(voices.Count == 1 ? "The ElevenLabs resource (only one is attached; may be omitted)." : "Which ElevenLabs resource to use.");
+        resource["enum"] = new JsonArray(voices.Select(r => (JsonNode)r.Name).ToArray());
+        return new LooperTool("generate_speech", description,
+            Schema(["text"],
+                ("text", Str("What to say — plain text; punctuation shapes the delivery.")),
+                ("fileName", Str("File name without extension, e.g. \"01_hook\". Omitted: derived from the text.")),
+                ("voiceId", Str("A voice id from list_voices; omitted: the resource's default voice.")),
+                ("resource", resource)),
+            async (args, ctx) =>
+            {
+                try
+                {
+                    return await ctx.Dispatcher.Send(new GenerateSpeechCommand(ctx.RunId, ctx.AgentId, Required(args, "text"),
+                        Optional(args, "fileName"), Optional(args, "voiceId"), Optional(args, "resource")), ctx.Cancellation);
+                }
+                catch (ElevenLabsException ex)
+                {
+                    // ElevenLabs' refusal (quota, bad voice, too long) is something the model can act on: a tool error, not a crash.
+                    throw new ToolArgumentException(ex.Message);
+                }
+            });
+    }
+
+    private static LooperTool ListVoices(IReadOnlyList<Resource> voices)
+    {
+        var resource = Str("Which ElevenLabs resource's account to list; omit when only one is attached.");
+        resource["enum"] = new JsonArray(voices.Select(r => (JsonNode)r.Name).ToArray());
+        return new LooperTool("list_voices",
+            "List the voices available to the ElevenLabs account — ids, names and labels such as accent, gender, age and use case — " +
+            "so you can pick one for generate_speech.",
+            Schema(("resource", resource)),
+            async (args, ctx) =>
+            {
+                try
+                {
+                    return await ctx.Dispatcher.Query(new ListVoicesQuery(ctx.AgentId, Optional(args, "resource")), ctx.Cancellation);
+                }
+                catch (ElevenLabsException ex)
+                {
+                    throw new ToolArgumentException(ex.Message);
+                }
+            });
+    }
+
+    private static LooperTool GetWorkItem(IReadOnlyList<Resource> boards)
+    {
+        var selected = boards.Select(b =>
+        {
+            var ids = AzureDevOpsTicketsResources.Parse(b).TicketIds;
+            return $"\"{b.Name}\": {(ids.Count > 0 ? string.Join(", ", ids.Select(id => $"#{id}")) : "none")}";
+        });
+        var description =
+            "Read an Azure DevOps work item in full, live: title, state, tags, description, acceptance criteria and repro steps. " +
+            "Use it when a ticket in your prompt was cut short, or to read a related item (a parent, a linked bug). Read-only; " +
+            "Looper holds the token. Selected tickets on this run — " + string.Join("; ", selected) + ".";
+        var resource = Str(boards.Count == 1 ? "The tickets resource (only one is attached; may be omitted)." : "Which tickets resource's organization to read from.");
+        resource["enum"] = new JsonArray(boards.Select(r => (JsonNode)r.Name).ToArray());
+        return new LooperTool("get_work_item", description,
+            Schema(["id"], ("id", new JsonObject { ["type"] = "integer", ["description"] = "The work item id, e.g. 12345." }), ("resource", resource)),
+            async (args, ctx) =>
+            {
+                try
+                {
+                    return await ctx.Dispatcher.Query(new GetWorkItemQuery(ctx.AgentId, RequiredWorkItemId(args, "id"), Optional(args, "resource")),
+                        ctx.Cancellation);
+                }
+                catch (Boards.AzureDevOpsException ex)
+                {
+                    // Azure DevOps' refusal (an expired token, an unknown project) is something the model can report: a tool error.
+                    throw new ToolArgumentException(ex.Message);
+                }
+            });
+    }
+
     private static Resource ResolvePool(IReadOnlyList<(Resource Resource, WorkspacePoolConfig Config)> pools, string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -270,4 +369,10 @@ public static class LooperTools
 
     private static Guid RequiredGuid(JsonObject args, string key) =>
         Guid.TryParse(Required(args, key), out var id) ? id : throw new ToolArgumentException($"'{key}' must be an id returned by Looper.");
+
+    /// <summary>A work item id: 12345, "12345" or "#12345".</summary>
+    private static int RequiredWorkItemId(JsonObject args, string key) =>
+        int.TryParse(Required(args, key).TrimStart('#'), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id) && id > 0
+            ? id
+            : throw new ToolArgumentException($"'{key}' must be a work item id, e.g. 12345.");
 }

@@ -1,4 +1,5 @@
 import {
+  apiErrorMessage,
   formatCost,
   formatDuration,
   formatInterval,
@@ -65,6 +66,8 @@ describe('modelShortName', () => {
     expect(modelShortName('claude-opus-5')).toBe('Opus 5');
     expect(modelShortName('claude-haiku-4-5')).toBe('Haiku 4.5');
     expect(modelShortName('claude-sonnet-5')).toBe('Sonnet 5');
+    expect(modelShortName('claude-opus-5-5')).toBe('Opus 5.5');
+    expect(modelShortName('claude-fable-5-1')).toBe('Fable 5.1');
   });
 });
 
@@ -81,5 +84,38 @@ describe('relativeTime', () => {
   it('treats suffix-less timestamps as UTC (API sends UTC)', () => {
     const utcNow = new Date().toISOString().replace('Z', '');
     expect(relativeTime(utcNow)).toBe('just now');
+  });
+});
+
+describe('apiErrorMessage', () => {
+  const fallback = 'Saving failed — check that the API is running and try again.';
+
+  it('prefers the validator message naming the field and its limit', () => {
+    const err = {
+      status: 400,
+      error: {
+        title: 'One or more validation errors occurred.',
+        errors: { 'Request.MaxTurns': ["'Request Max Turns' must be between 1 and 250. You entered 500."] },
+      },
+    };
+    expect(apiErrorMessage(err, fallback)).toBe(
+      "'Request Max Turns' must be between 1 and 250. You entered 500.",
+    );
+  });
+
+  it('joins several field errors and falls back to detail, title, then the caller message', () => {
+    const many = { error: { errors: { a: ['First is wrong.'], b: ['Second is wrong.'] } } };
+    expect(apiErrorMessage(many, fallback)).toBe('First is wrong. Second is wrong.');
+    expect(apiErrorMessage({ error: { detail: 'Not in this workflow.' } }, fallback)).toBe(
+      'Not in this workflow.',
+    );
+    expect(apiErrorMessage({ error: { title: 'Conflict' } }, fallback)).toBe('Conflict');
+    expect(apiErrorMessage({ error: 'plain text reason' }, fallback)).toBe('plain text reason');
+  });
+
+  it('uses the fallback only when the response carries no reason', () => {
+    expect(apiErrorMessage({ status: 0, error: null }, fallback)).toBe(fallback);
+    expect(apiErrorMessage({ error: { errors: {} } }, fallback)).toBe(fallback);
+    expect(apiErrorMessage(null, fallback)).toBe(fallback);
   });
 });

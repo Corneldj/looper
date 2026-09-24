@@ -86,3 +86,22 @@ export function modelShortName(model: string): string {
     .replace(/-(\d)$/, ' $1')
     .replace(/^([a-z])/, c => c.toUpperCase());
 }
+
+/**
+ * The message an API error should show the user. The API answers a rejected write with a real
+ * reason — a ProblemDetails `detail`, or a ValidationProblemDetails `errors` map naming the field
+ * and its limit — so prefer any of those over a generic fallback. Reporting "check that the API is
+ * running" for a 400 sends the user looking for an outage instead of at the field they got wrong.
+ */
+export function apiErrorMessage(err: unknown, fallback: string): string {
+  const body = (err as { error?: unknown } | null)?.error;
+  if (typeof body === 'string' && body.trim()) return body.trim();
+
+  const problem = body as { detail?: string; title?: string; errors?: Record<string, string[]> } | null;
+  const fieldErrors = Object.values(problem?.errors ?? {})
+    .flat()
+    .filter(message => typeof message === 'string' && message.trim());
+  if (fieldErrors.length) return fieldErrors.join(' ');
+
+  return problem?.detail?.trim() || problem?.title?.trim() || fallback;
+}

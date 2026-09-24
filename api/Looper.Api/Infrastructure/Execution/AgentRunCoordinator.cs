@@ -18,6 +18,7 @@ public sealed class AgentRunCoordinator(
     MetricRecorder metricRecorder,
     ReviewRunner reviewRunner,
     EventDispatcher eventDispatcher,
+    Boards.BoardHarness boardHarness,
     IOptions<LooperOptions> options,
     ILogger<AgentRunCoordinator> logger)
 {
@@ -115,7 +116,18 @@ public sealed class AgentRunCoordinator(
                 return;
             }
 
-            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(options.Value.RunTimeoutMinutes));
+            // Limits are read as the slot is taken, so a Settings change applies to the next run to
+            // start — no restart. Zero minutes is "no limit": a source given no delay never fires.
+            RunLimitSettings limits;
+            await using (var limitsDb = await dbFactory.CreateDbContextAsync())
+            {
+                limits = await RunLimits.ReadAsync(limitsDb, options.Value, CancellationToken.None);
+            }
+            await log("info", $"Run limits: {limits.Describe()}.");
+
+            using var timeoutCts = limits.Timeout is { } timeout
+                ? new CancellationTokenSource(timeout)
+                : new CancellationTokenSource();
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
                 timeoutCts.Token, active.UserCancellation.Token);
 
@@ -133,7 +145,7 @@ public sealed class AgentRunCoordinator(
                 }
                 catch (OperationCanceledException)
                 {
-                    await FinalizeCancelledAsync(runId, agent.Id, timeoutCts.IsCancellationRequested, log);
+                    await FinalizeCancelledAsync(runId, agent.Id, timeoutCts.IsCancellationRequested, log, limits.TimeoutMinutes);
                     return;
                 }
                 if (beforeResults.Any(r => !r.Passed))
@@ -154,9 +166,42 @@ public sealed class AgentRunCoordinator(
                 await log("info", "[dry run] Scripts skipped.");
             }
 
+            // Board resources, gathered like before-run scripts: the selected tickets are read fresh
+            // and any one-off prompt is taken for this run. A ticket that cannot be read refuses the
+            // run before any tokens are spent — and leaves the one-off prompt for the next one.
+            var briefing = Boards.BoardBriefing.None;
+            if (!agent.DryRun)
+            {
+                try
+                {
+                    briefing = await boardHarness.PrepareAsync(resources, log, linkedCts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    await FinalizeCancelledAsync(runId, agent.Id, timeoutCts.IsCancellationRequested, log, limits.TimeoutMinutes);
+                    return;
+                }
+                if (briefing.Refusal is { } refusal)
+                {
+                    await log("error", $"{refusal} The iteration was not started.");
+                    var refused = new AgentExecutionOutcome(false, null, Truncate($"{refusal} The iteration was not started.", 4000), 0, 0, 0, 0, 0, 0, 0);
+                    await FinalizeAsync(runId, agent.Id, refused,
+                        beforeResults.Count > 0 ? (TestingActionRunner.Serialize(beforeResults), true) : null,
+                        new ReviewInfo(null, 0, null, null));
+                    await RaiseCompletionEventsAsync(agent, resources, runId, refused, null, eventDepth);
+                    return;
+                }
+            }
+            else
+            {
+                await boardHarness.RehearseAsync(resources, log);
+            }
+
             var context = new AgentExecutionContext(agent, resources, runId,
                 TriggerEvents: eventContext,
-                ScriptOutputs: ScriptRunner.BuildPromptSection(beforeResults));
+                ScriptOutputs: ScriptRunner.BuildPromptSection(beforeResults),
+                DefaultMaxBudgetUsd: limits.DefaultMaxBudgetUsd,
+                Briefing: briefing.Sections);
 
             AgentExecutionOutcome outcome;
             try
@@ -165,7 +210,7 @@ public sealed class AgentRunCoordinator(
             }
             catch (OperationCanceledException)
             {
-                await FinalizeCancelledAsync(runId, agent.Id, timeoutCts.IsCancellationRequested, log);
+                await FinalizeCancelledAsync(runId, agent.Id, timeoutCts.IsCancellationRequested, log, limits.TimeoutMinutes);
                 return;
             }
             catch (Exception ex)
@@ -173,6 +218,13 @@ public sealed class AgentRunCoordinator(
                 logger.LogError(ex, "Run {RunId} for agent {AgentName} crashed", runId, agent.Name);
                 await log("error", $"Run crashed: {ex.Message}");
                 outcome = new AgentExecutionOutcome(false, null, ex.Message, 0, 0, 0, 0, 0, 0, 0);
+            }
+
+            // No turns means the model never started (a resource refused to apply, the CLI is
+            // missing): the one-off prompt was not used, so it waits for the next run.
+            if (!outcome.Success && outcome.NumTurns == 0 && briefing.Taken.Count > 0)
+            {
+                await boardHarness.ReturnPromptsAsync(briefing, log);
             }
 
             // After-run scripts may report metrics too; only the FINAL gate run counts (review fix
@@ -187,7 +239,7 @@ public sealed class AgentRunCoordinator(
                 }
                 catch (OperationCanceledException)
                 {
-                    await FinalizeCancelledAsync(runId, agent.Id, timeoutCts.IsCancellationRequested, log);
+                    await FinalizeCancelledAsync(runId, agent.Id, timeoutCts.IsCancellationRequested, log, limits.TimeoutMinutes);
                     return;
                 }
             }
@@ -203,11 +255,12 @@ public sealed class AgentRunCoordinator(
             try
             {
                 (outcome, testResults, review) = await RunReviewGateAsync(
-                    agent, resources, runId, executor, outcome, testResults, beforeResults, afterResults, log, linkedCts.Token);
+                    agent, resources, runId, executor, outcome, testResults, beforeResults, afterResults,
+                    limits.DefaultMaxBudgetUsd, briefing.Sections, log, linkedCts.Token);
             }
             catch (OperationCanceledException)
             {
-                await FinalizeCancelledAsync(runId, agent.Id, timeoutCts.IsCancellationRequested, log);
+                await FinalizeCancelledAsync(runId, agent.Id, timeoutCts.IsCancellationRequested, log, limits.TimeoutMinutes);
                 return;
             }
 
@@ -224,7 +277,11 @@ public sealed class AgentRunCoordinator(
             await FinalizeAsync(runId, agent.Id, outcome, testResults, review);
             if (afterResults.Count > 0) await metricRecorder.RecordFromScriptsAsync(agent, resources, runId, afterResults, log);
             await RaiseCompletionEventsAsync(agent, resources, runId, outcome, testResults?.AllPassed, eventDepth);
-            if (!agent.DryRun) LogOutcomeToGraphInboxes(agent, resources, runId, outcome, review, log);
+            if (!agent.DryRun)
+            {
+                LogOutcomeToGraphInboxes(agent, resources, runId, outcome, review, log);
+                await boardHarness.AfterRunAsync(agent, resources, runId, log);
+            }
         }
         catch (Exception ex)
         {
@@ -284,6 +341,8 @@ public sealed class AgentRunCoordinator(
         (string ResultsJson, bool AllPassed)? testResults,
         IReadOnlyList<TestingActionResult> beforeResults,
         List<TestingActionResult> afterSink,
+        decimal? defaultMaxBudgetUsd,
+        IReadOnlyList<string> briefing,
         RunLogWriter log,
         CancellationToken cancellationToken)
     {
@@ -367,8 +426,10 @@ public sealed class AgentRunCoordinator(
                 $"From reviewer '{f.Reviewer}':\n{f.Verdict.FixInstructions ?? f.Verdict.Summary}"));
             await log("info", $"Fix round {fixRoundsUsed}/{maxFixRounds}: re-running the worker with the reviewer's instructions.");
 
+            // The worker starts afresh each round: it gets the same tickets and one-off prompt again.
             var fixOutcome = await executor.ExecuteAsync(
-                new AgentExecutionContext(agent, resources, runId, instructions), log, cancellationToken);
+                new AgentExecutionContext(agent, resources, runId, instructions, DefaultMaxBudgetUsd: defaultMaxBudgetUsd, Briefing: briefing),
+                log, cancellationToken);
             outcome = new AgentExecutionOutcome(
                 fixOutcome.Success,
                 fixOutcome.ResultText ?? outcome.ResultText,
@@ -514,10 +575,10 @@ public sealed class AgentRunCoordinator(
         await db.SaveChangesAsync();
     }
 
-    private async Task FinalizeCancelledAsync(Guid runId, Guid agentId, bool timedOut, RunLogWriter log)
+    private async Task FinalizeCancelledAsync(Guid runId, Guid agentId, bool timedOut, RunLogWriter log, int timeoutMinutes = 0)
     {
         await log(timedOut ? "error" : "warn", timedOut
-            ? $"Run exceeded the {options.Value.RunTimeoutMinutes} minute limit and was terminated."
+            ? $"Run exceeded the {timeoutMinutes} minute limit and was terminated. Raise it (or set 0 for no limit) under Settings → Run limits."
             : "Run was cancelled.");
 
         await using var db = await dbFactory.CreateDbContextAsync();

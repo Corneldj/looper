@@ -383,8 +383,28 @@
               [description]="description()"
               (valuesChange)="customValues.set($event)"
             />
+          } @else if (isTicketsType()) {
+            <app-ticket-picker
+              [values]="customValues()"
+              [fields]="customFields()"
+              [resourceId]="resource()?.id ?? null"
+              (valuesChange)="customValues.set($event)"
+            />
+          } @else if (isJiraType()) {
+            <app-jira-settings
+              [values]="customValues()"
+              [fields]="customFields()"
+              [saved]="!!resource()"
+              (valuesChange)="customValues.set($event)"
+            />
           } @else {
-          @for (field of customFields(); track field.key) {
+          @if (isOneOffPromptType()) {
+            <p class="card-note">
+              📝 The instructions are typed in the box on this resource's card on the workbench — the next real run takes them
+              and clears the box as it starts.
+            </p>
+          }
+          @for (field of formFields(); track field.key) {
             <div class="field">
               @if (field.key === 'topic' && isEventType()) {
                 <label>{{ field.label }}<span class="req"> *</span></label>
@@ -486,6 +506,18 @@
                     <button type="button" class="btn btn-ghost" (click)="openCustomFolderPicker(field.key)">Browse…</button>
                   </div>
                 }
+                @case ('File') {
+                  <label>{{ field.label }}@if (field.required) {<span class="req"> *</span>}</label>
+                  <div class="path-with-browse">
+                    <input
+                      class="input mono"
+                      [placeholder]="field.placeholder ?? ''"
+                      [ngModel]="asText(customValues()[field.key])"
+                      (ngModelChange)="setCustomValue(field.key, $event)"
+                    />
+                    <button type="button" class="btn btn-ghost" (click)="openCustomFilePicker(field.key)">Browse…</button>
+                  </div>
+                }
                 @default {
                   <label>{{ field.label }}@if (field.required) {<span class="req"> *</span>}</label>
                   <input
@@ -532,5 +564,9 @@
 }
 
 @if (customPathFieldKey(); as fieldKey) {
-  <app-folder-picker [startPath]="asText(customValues()[fieldKey]) || null" (picked)="onCustomFolderPicked($event)" />
+  <app-folder-picker
+    [mode]="customPickerMode()"
+    [startPath]="asText(customValues()[fieldKey]) || null"
+    (picked)="onCustomFolderPicked($event)"
+  />
 }

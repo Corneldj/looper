@@ -52,7 +52,10 @@ public enum ResourceFieldKind
     Select,
 
     /// <summary>A filesystem path — the UI offers the built-in folder browser.</summary>
-    Path
+    Path,
+
+    /// <summary>A single file's path — the UI offers the browser in file mode. Additive: older module DLLs never emit it.</summary>
+    File
 }
 
 public sealed record ResourceField(

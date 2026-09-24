@@ -17,7 +17,18 @@ public sealed record MapResourceDto(
     string Icon,
     string TypeLabel,
     string Description,
-    IReadOnlyList<Guid> AgentIds);
+    IReadOnlyList<Guid> AgentIds,
+    /// <summary>For resources edited on their canvas card; null for every other type.</summary>
+    MapCardDto? Card = null);
+
+/// <summary>
+/// What a resource's canvas card edits in place: a one-off prompt's waiting text, a Jira resource's
+/// issue, or an Azure DevOps tickets resource's selection — and whether it can reach its service
+/// yet. Served with every poll, so a run that takes the prompt or clears the selection shows on the
+/// card within seconds. Never a secret.
+/// </summary>
+public sealed record MapCardDto(string? Text, string? IssueKey, string? IssueSummary, bool Connected,
+    IReadOnlyList<int>? TicketIds = null);
 
 /// <summary>A metric attached to an agent with its 30-day reading (total, average or gauge per the metric) — the canvas's outcome line.</summary>
 public sealed record MapMetricDto(Guid ResourceId, string Name, string Unit, double? Current);
@@ -141,7 +152,8 @@ public sealed class GetArchitectureMapHandler(
             resources.Select(r =>
             {
                 var (icon, label) = TypeMeta(r.Type, r.CustomTypeKey);
-                return new MapResourceDto(r.Id, r.Name, r.Type, r.CustomTypeKey, icon, label, r.Description, r.AgentIds);
+                return new MapResourceDto(r.Id, r.Name, r.Type, r.CustomTypeKey, icon, label, r.Description, r.AgentIds,
+                    Card(r.Type, r.CustomTypeKey, r.ConfigJson));
             }).ToList(),
             agents.Select(a => new MapAgentDto(
                 a.Id, a.Name, a.Description, a.Model, a.Effort, a.AutonomyLevel, a.Enabled, a.DryRun,
@@ -155,6 +167,26 @@ public sealed class GetArchitectureMapHandler(
                 new[] { Infrastructure.Execution.EventDispatcher.CompletionTopic(a.Name, true), Infrastructure.Execution.EventDispatcher.CompletionTopic(a.Name, false) }
                     .Concat(raisersByAgent.GetValueOrDefault(a.Id) ?? []).Distinct().ToList(),
                 Infrastructure.Execution.EventDispatcher.EffectivePatterns(a.TriggerMode, a.TriggerTopics))).ToList());
+    }
+
+    internal static MapCardDto? Card(ResourceType type, string? customTypeKey, string configJson)
+    {
+        if (type != ResourceType.Custom) return null;
+        if (string.Equals(customTypeKey, Modules.BuiltIn.OneOffPromptModule.TypeKey_, StringComparison.OrdinalIgnoreCase))
+        {
+            return new MapCardDto(Modules.BuiltIn.OneOffPromptResources.Text(configJson), null, null, true);
+        }
+        if (string.Equals(customTypeKey, Modules.BuiltIn.JiraTimeTrackingModule.TypeKey_, StringComparison.OrdinalIgnoreCase))
+        {
+            var jira = Modules.BuiltIn.JiraTimeTrackingResources.Parse(new ResourceModuleContext(configJson));
+            return new MapCardDto(null, jira.IssueKey, jira.IssueSummary, jira.HasConnection);
+        }
+        if (string.Equals(customTypeKey, Modules.BuiltIn.AzureDevOpsTicketsModule.TypeKey_, StringComparison.OrdinalIgnoreCase))
+        {
+            var tickets = Modules.BuiltIn.AzureDevOpsTicketsResources.Parse(new ResourceModuleContext(configJson));
+            return new MapCardDto(null, null, null, tickets.HasConnection, tickets.TicketIds);
+        }
+        return null;
     }
 
     private (string Icon, string Label) TypeMeta(ResourceType type, string? customTypeKey)

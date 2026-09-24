@@ -1,0 +1,38 @@
+@if (issue(); as current) {
+  <div class="issue-picked" [title]="current.key + (current.summary ? ' — ' + current.summary : '')">
+    <span class="issue-picked-text">⏱ <span class="mono">{{ current.key }}</span>
+      @if (current.summary) {
+        {{ current.summary }}
+      }
+    </span>
+    <button type="button" class="issue-clear" title="Clear the issue" aria-label="Clear the issue" [disabled]="saving()" (click)="clear()">✕</button>
+  </div>
+} @else {
+  <div class="issue-none" title="Runs book no time until an issue is picked.">No issue yet — nothing is booked.</div>
+}
+
+<div class="issue-search">
+  <input
+    class="issue-input"
+    [attr.aria-label]="'Search Jira for the issue ' + resource().name + ' books time to'"
+    [placeholder]="connected() ? (issue() ? 'Search for another issue…' : 'Search Jira issues…') : 'Add Jira address + token (✎)'"
+    [disabled]="!connected() || saving()"
+    [ngModel]="query()"
+    (ngModelChange)="onQuery($event)"
+    (keydown)="onKey($event)"
+  />
+  @if (results().length || searching() || error() || query().trim().length >= 2) {
+    <div class="issue-results">
+      @for (result of results(); track result.key) {
+        <button type="button" class="issue-result" (click)="pick(result)">
+          <span class="issue-key mono">{{ result.key }}</span>
+          <span class="issue-summary">{{ result.summary }}</span>
+        </button>
+      } @empty {
+        <span class="issue-note" [class.error]="!!error()">
+          {{ error() ?? (searching() ? 'Searching Jira…' : 'No issue matches “' + query().trim() + '”.') }}
+        </span>
+      }
+    </div>
+  }
+</div>

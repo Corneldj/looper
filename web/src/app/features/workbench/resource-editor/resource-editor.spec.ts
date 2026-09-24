@@ -3,7 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { API_BASE } from '../../../core/api.service';
 import { ResourcesStore } from '../../../core/stores';
-import { ResourceDto } from '../../../core/models';
+import { ResourceDto, ResourceFieldDto, ResourceTypeDto } from '../../../core/models';
 import { ResourceEditor } from './resource-editor';
 
 function resource(overrides: Partial<ResourceDto>): ResourceDto {
@@ -79,5 +79,114 @@ describe('ResourceEditor — Check', () => {
     fixture.componentInstance.testScriptId.set('s2');
     fixture.detectChanges();
     expect(fixture.componentInstance.canSave()).toBeTrue();
+  });
+});
+
+describe('ResourceEditor — board types', () => {
+  let http: HttpTestingController;
+
+  const field = (key: string, kind: ResourceFieldDto['kind'], required = false, options: string[] | null = null): ResourceFieldDto =>
+    ({ key, label: key, kind, required, hint: null, options, placeholder: null });
+
+  const ticketsType: ResourceTypeDto = {
+    typeKey: 'AzureDevOpsTickets', label: 'Azure DevOps tickets', icon: '🎫', blurb: '', builtIn: true,
+    fields: [
+      field('organization', 'Text', true), field('project', 'Text', true), field('pat', 'Password', true),
+      field('assignee', 'Select', false, ['Assigned to me', 'Assigned to me or unassigned', 'Anyone']),
+      field('ticketIds', 'Text'), field('clearAfterSuccess', 'Boolean'),
+    ],
+  };
+
+  const jiraType: ResourceTypeDto = {
+    typeKey: 'JiraTimeTracking', label: 'Jira time tracking', icon: '⏱️', blurb: '', builtIn: true,
+    fields: [
+      field('baseUrl', 'Text', true), field('pat', 'Password', true), field('issueKey', 'Text'), field('issueSummary', 'Text'),
+      field('booking', 'Select', false, ['After every run', 'After successful runs', 'Never']),
+    ],
+  };
+
+  const promptType: ResourceTypeDto = {
+    typeKey: 'OneOffPrompt', label: 'One-off prompt', icon: '📝', blurb: '', builtIn: true,
+    fields: [field('text', 'Multiline')],
+  };
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [ResourceEditor],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    http = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    http.match(r => r.url === `${API_BASE}/agents`).forEach(r => r.flush([]));
+    http.verify({ ignoreCancelled: true });
+  });
+
+  function open(typeDef: ResourceTypeDto): ComponentFixture<ResourceEditor> {
+    const fixture = TestBed.createComponent(ResourceEditor);
+    fixture.componentRef.setInput('type', 'Custom');
+    fixture.componentRef.setInput('typeDef', typeDef);
+    fixture.componentRef.setInput('resource', null);
+    fixture.componentRef.setInput('workflowId', 'default');
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('edits Azure DevOps tickets on the board picker and saves the picked tickets', () => {
+    const fixture = open(ticketsType);
+    const element: HTMLElement = fixture.nativeElement;
+    expect(element.querySelector('app-ticket-picker')).toBeTruthy();
+    expect(element.querySelector('app-jira-settings')).toBeNull();
+
+    const editor = fixture.componentInstance;
+    editor.name.set('Sprint board');
+    editor.customValues.set({ organization: 'contoso', project: 'Fabrikam', pat: 'token', assignee: '', ticketIds: '12, 13', clearAfterSuccess: true });
+    fixture.detectChanges();
+    expect(editor.canSave()).toBeTrue();
+
+    editor.save();
+    const post = http.expectOne(r => r.method === 'POST' && r.url === `${API_BASE}/resources`);
+    expect(post.request.body.customTypeKey).toBe('AzureDevOpsTickets');
+    expect(JSON.parse(post.request.body.configJson)).toEqual({
+      organization: 'contoso', project: 'Fabrikam', pat: 'token', ticketIds: '12, 13', clearAfterSuccess: true,
+    });
+    post.flush(resource({ id: 'new', name: 'Sprint board', customTypeKey: 'AzureDevOpsTickets' }));
+  });
+
+  it('edits Jira time tracking without the issue — the card owns it — and never sends it back', () => {
+    const fixture = open(jiraType);
+    const element: HTMLElement = fixture.nativeElement;
+    expect(element.querySelector('app-jira-settings')).toBeTruthy();
+    expect(element.textContent).toContain('pick the issue on the resource\'s card');
+
+    const editor = fixture.componentInstance;
+    editor.name.set('Costing time');
+    editor.customValues.set({ baseUrl: 'https://jira.test', pat: 'token', issueKey: 'COST-1', issueSummary: 'Stale copy', booking: 'Never' });
+    fixture.detectChanges();
+    expect(editor.canSave()).withContext('no issue is needed to save').toBeTrue();
+
+    editor.save();
+    const post = http.expectOne(r => r.method === 'POST' && r.url === `${API_BASE}/resources`);
+    expect(JSON.parse(post.request.body.configJson)).toEqual({ baseUrl: 'https://jira.test', pat: 'token', booking: 'Never' });
+    post.flush(resource({ id: 'new', name: 'Costing time', customTypeKey: 'JiraTimeTracking' }));
+  });
+
+  it('keeps the one-off prompt’s box off the modal and out of what it saves, and a refused save says why', () => {
+    const fixture = open(promptType);
+    const element: HTMLElement = fixture.nativeElement;
+    expect(element.querySelector('textarea')).withContext('the box lives on the card').toBeNull();
+    expect(element.querySelector('.card-note')?.textContent).toContain('box on this resource\'s card');
+
+    const editor = fixture.componentInstance;
+    editor.name.set('Next run');
+    editor.customValues.set({ text: 'A copy from when the modal opened' });
+    editor.save();
+    const post = http.expectOne(r => r.method === 'POST' && r.url === `${API_BASE}/resources`);
+    expect(JSON.parse(post.request.body.configJson)).toEqual({});
+    post.flush({ title: 'Resource names must be unique in a workflow.' }, { status: 400, statusText: 'Bad Request' });
+    fixture.detectChanges();
+
+    expect(element.querySelector('.save-error')?.textContent).toContain('Resource names must be unique');
   });
 });

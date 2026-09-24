@@ -104,20 +104,31 @@
               class="node resource {{ nodeClass('resource', node.data.id) }}"
               [class.unused]="node.data.agentIds.length === 0"
               [class.wiring]="drag()?.resourceId === node.data.id"
+              [class.has-card]="!!node.data.card"
               [style.left.px]="node.x" [style.top.px]="node.y" [style.width.px]="node.w" [style.height.px]="node.h"
-              [title]="node.data.description || (node.data.typeLabel + (node.data.agentIds.length === 0 ? ' — not connected to any agent yet' : ' — used by ' + node.data.agentIds.length + ' agent(s)'))"
               (mouseenter)="setHover('resource', node.data.id)" (mouseleave)="clearHover()"
             >
-              <span class="res-icon">{{ node.data.icon }}</span>
-              <span class="res-name">{{ node.data.name }}</span>
-              @if (graphFor(node.data.id); as graph) {
-                @if (graph.health && (graph.health.inboxPending > 0 || graph.health.competingCount + graph.health.problemCount > 0)) {
-                  <span class="chip chip-amber mini" [title]="graph.health.inboxPending + ' inbox item(s) pending · ' + (graph.health.competingCount + graph.health.problemCount) + ' issue(s)'">
-                    📥 {{ graph.health.inboxPending }}
-                  </span>
-                } @else if (graph.curator) {
-                  <span class="chip chip-accent mini" [title]="'Curated by ' + graph.curator">🧑‍🔧</span>
+              <div
+                class="res-head"
+                [title]="node.data.description || (node.data.typeLabel + (node.data.agentIds.length === 0 ? ' — not connected to any agent yet' : ' — used by ' + node.data.agentIds.length + ' agent(s)'))"
+              >
+                <span class="res-icon">{{ node.data.icon }}</span>
+                <span class="res-name">{{ node.data.name }}</span>
+                @if (graphFor(node.data.id); as graph) {
+                  @if (graph.health && (graph.health.inboxPending > 0 || graph.health.competingCount + graph.health.problemCount > 0)) {
+                    <span class="chip chip-amber mini" [title]="graph.health.inboxPending + ' inbox item(s) pending · ' + (graph.health.competingCount + graph.health.problemCount) + ' issue(s)'">
+                      📥 {{ graph.health.inboxPending }}
+                    </span>
+                  } @else if (graph.curator) {
+                    <span class="chip chip-accent mini" [title]="'Curated by ' + graph.curator">🧑‍🔧</span>
+                  }
                 }
+              </div>
+              <!-- Resources edited in place: the one-off prompt's box and the Jira issue chooser live on the card. -->
+              @if (isOneOffPrompt(node.data)) {
+                <app-prompt-card [resource]="node.data" (saved)="onCardSaved($event)" />
+              } @else if (isTimeTracker(node.data)) {
+                <app-jira-issue-card [resource]="node.data" (saved)="onCardSaved($event)" />
               }
               <span class="res-actions">
                 @if (isScript(node.data)) {
