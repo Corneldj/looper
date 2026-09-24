@@ -37,6 +37,19 @@ builder.Services.Decorate(typeof(ICommandHandler<,>), typeof(LoggingCommandHandl
 builder.Services.Decorate(typeof(IQueryHandler<,>), typeof(LoggingQueryHandlerDecorator<,>));
 
 // Execution engine.
+// The only HTTP client to ElevenLabs; the key is added per request from the resource that holds it.
+builder.Services.AddHttpClient<Looper.Api.Infrastructure.Audio.ElevenLabsClient>(client =>
+{
+    client.BaseAddress = new Uri(Looper.Api.Infrastructure.Audio.ElevenLabsClient.DefaultBaseUrl);
+    client.Timeout = TimeSpan.FromMinutes(2); // a full paragraph takes a while to synthesize
+});
+// Board resources: Azure DevOps for tickets, Jira/Tempo for time. Tokens are added per request
+// from the resource that holds them; the harness creates its clients through the same names.
+builder.Services.AddHttpClient<Looper.Api.Infrastructure.Boards.AzureDevOpsClient>(
+    Looper.Api.Infrastructure.Boards.AzureDevOpsClient.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHttpClient<Looper.Api.Infrastructure.Boards.JiraTempoClient>(
+    Looper.Api.Infrastructure.Boards.JiraTempoClient.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddSingleton<Looper.Api.Infrastructure.Boards.BoardHarness>();
 builder.Services.AddSingleton<ClaudeAuthProvider>();
 builder.Services.AddSingleton<ClaudeCliExecutor>();
 builder.Services.AddSingleton<SimulatedAgentExecutor>();
@@ -126,6 +139,11 @@ await using (var scope = app.Services.CreateAsyncScope())
     registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.KnowledgeGraphModule());
     registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.MemoryGraphModule());
     registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.ExecutionGraphModule());
+    registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.FileModule());
+    registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.ElevenLabsModule());
+    registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.AzureDevOpsTicketsModule());
+    registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.JiraTimeTrackingModule());
+    registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.OneOffPromptModule());
     registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.SpecificationModule());
     registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.ScriptModule());
     registry.RegisterBuiltIn(new Looper.Api.Modules.BuiltIn.MetricModule());

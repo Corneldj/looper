@@ -1,0 +1,18 @@
+<textarea
+  class="prompt-box"
+  [attr.aria-label]="'Instructions for the next run of ' + resource().name"
+  placeholder="Instructions for the next run…"
+  [maxlength]="maxLength"
+  [ngModel]="draft()"
+  (ngModelChange)="onInput($event)"
+  (focus)="onFocus()"
+  (blur)="onBlur()"
+></textarea>
+<span
+  class="prompt-status"
+  [class.error]="state() === 'error'"
+  [class.waiting]="state() === 'idle' && !!draft().trim()"
+  title="The next real run takes the text into its prompt and clears the box as it starts; that run's log keeps a copy."
+>
+  {{ status() }}
+</span>

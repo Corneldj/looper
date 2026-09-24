@@ -7,6 +7,7 @@ import {
   AgentSummaryDto,
   ArchitectResultDto,
   ArchitectureMapDto,
+  BoardLookupRequest,
   ClaudeInstallResultDto,
   ClaudeStatusDto,
   CostSeriesPointDto,
@@ -17,6 +18,7 @@ import {
   GeneratedResourceTypeDto,
   GenerationJobDto,
   GraphStatusDto,
+  JiraIssueDto,
   MetricSummaryDto,
   MetricValueDto,
   ModelUsageDto,
@@ -37,6 +39,7 @@ import {
   ScriptRunRequest,
   ScriptRunResultDto,
   SettingsDto,
+  TicketSummaryDto,
   UpdatePrBody,
   UpdateSettingsRequest,
   UserActionDto,
@@ -61,6 +64,11 @@ export class ApiService {
     if (type) params = params.set('type', type);
     if (workflowId) params = params.set('workflowId', workflowId);
     return this.http.get<ResourceDto[]>(`${API_BASE}/resources`, { params });
+  }
+
+  /** One resource as stored now — runs rewrite some (a one-off prompt clears as a run takes it). */
+  getResource(id: string): Observable<ResourceDto> {
+    return this.http.get<ResourceDto>(`${API_BASE}/resources/${id}`);
   }
 
   createResource(body: {
@@ -287,6 +295,28 @@ export class ApiService {
     return this.http.post<ScriptAssistResultDto>(`${API_BASE}/scripts/assist`, body);
   }
 
+  // ---------- Boards (Azure DevOps tickets, Jira time tracking) ----------
+
+  /** The open work items an Azure DevOps tickets resource's filters match, plus any selected ones they no longer do. */
+  listBoardTickets(body: BoardLookupRequest): Observable<TicketSummaryDto[]> {
+    return this.http.post<TicketSummaryDto[]>(`${API_BASE}/boards/tickets`, body);
+  }
+
+  /** Jira's issue typeahead, through a Jira time-tracking resource's address and token. */
+  searchJiraIssues(body: BoardLookupRequest & { query: string }): Observable<JiraIssueDto[]> {
+    return this.http.post<JiraIssueDto[]>(`${API_BASE}/boards/jira-issues`, body);
+  }
+
+  /** The prompt box on a one-off prompt's card: writes the text alone. */
+  setOneOffPrompt(resourceId: string, text: string): Observable<ResourceDto> {
+    return this.http.put<ResourceDto>(`${API_BASE}/boards/prompts/${resourceId}`, { text });
+  }
+
+  /** The issue chooser on a Jira time-tracking card: writes key and title alone; an empty key clears both. */
+  setJiraIssue(resourceId: string, issueKey: string, issueSummary: string): Observable<ResourceDto> {
+    return this.http.put<ResourceDto>(`${API_BASE}/boards/time-trackers/${resourceId}/issue`, { issueKey, issueSummary });
+  }
+
   // ---------- About ----------
 
   getVersion(): Observable<VersionDto> {
@@ -308,8 +338,10 @@ export class ApiService {
   // ---------- Folder browsing ----------
 
   /** Lists sub-directories of a path on the machine running the API. Omit path for the home folder. */
-  browseDirectories(path?: string | null): Observable<DirectoryListingDto> {
-    const params = path ? new HttpParams().set('path', path) : undefined;
+  browseDirectories(path?: string | null, includeFiles = false): Observable<DirectoryListingDto> {
+    let params = new HttpParams();
+    if (path) params = params.set('path', path);
+    if (includeFiles) params = params.set('includeFiles', 'true');
     return this.http.get<DirectoryListingDto>(`${API_BASE}/filesystem/directories`, { params });
   }
 

@@ -30,9 +30,9 @@ public sealed class AgentRunCoordinatorTests : IDisposable
         public LooperDbContext CreateDbContext() => new(options);
     }
 
-    private AgentRunCoordinator CreateCoordinator()
+    private AgentRunCoordinator CreateCoordinator(int runTimeoutMinutes = 5)
     {
-        var looperOptions = Options.Create(new LooperOptions { MaxConcurrentRuns = 2, RunTimeoutMinutes = 5 });
+        var looperOptions = Options.Create(new LooperOptions { MaxConcurrentRuns = 2, RunTimeoutMinutes = runTimeoutMinutes });
         var registry = new ResourceModuleRegistry(NullLogger<ResourceModuleRegistry>.Instance);
         return new AgentRunCoordinator(
             new Factory(_options),
@@ -45,6 +45,7 @@ public sealed class AgentRunCoordinatorTests : IDisposable
             new MetricRecorder(new Factory(_options), NullLogger<MetricRecorder>.Instance),
             new ReviewRunner(looperOptions, new ClaudeAuthProvider(new Factory(_options)), NullLogger<ReviewRunner>.Instance),
             new EventDispatcher(NullLogger<EventDispatcher>.Instance),
+            new Looper.Api.Infrastructure.Boards.BoardHarness(new Factory(_options), new StubHttpClientFactory(), NullLogger<Looper.Api.Infrastructure.Boards.BoardHarness>.Instance),
             looperOptions,
             NullLogger<AgentRunCoordinator>.Instance);
     }
@@ -91,6 +92,49 @@ public sealed class AgentRunCoordinatorTests : IDisposable
             await Task.Delay(50);
         }
         return false;
+    }
+
+    private async Task<List<string>> ReadLog(Guid runId)
+    {
+        await using var db = new LooperDbContext(_options);
+        return await db.RunLogs.AsNoTracking().Where(l => l.RunId == runId).Select(l => l.Message).ToListAsync();
+    }
+
+    // Before this, a zero limit built a CancellationTokenSource(TimeSpan.Zero) — born cancelled — so
+    // every run was reported as having "exceeded the 0 minute limit" before its first turn.
+    [Fact]
+    public async Task A_zero_time_limit_means_no_limit_not_an_instant_timeout()
+    {
+        var agent = await SeedAgent();
+        var coordinator = CreateCoordinator(runTimeoutMinutes: 0);
+
+        var runId = await coordinator.TriggerRunAsync(agent.Id, RunTrigger.Manual);
+        var run = await WaitForCompletion(runId!.Value, TimeSpan.FromSeconds(60));
+
+        Assert.NotNull(run);
+        Assert.NotEqual(RunStatus.TimedOut, run!.Status);
+        Assert.True(run.Status is RunStatus.Succeeded or RunStatus.Failed);
+        Assert.Contains(await ReadLog(runId.Value), line => line.Contains("Run limits: time=no limit"));
+    }
+
+    [Fact]
+    public async Task Limits_stored_in_settings_override_appsettings_without_a_restart()
+    {
+        var agent = await SeedAgent();
+        await using (var db = new LooperDbContext(_options))
+        {
+            db.Settings.Add(new AppSetting { Key = AppSettingKeys.RunTimeoutMinutes, Value = "0" });
+            db.Settings.Add(new AppSetting { Key = AppSettingKeys.DefaultMaxBudgetUsd, Value = "2.5" });
+            await db.SaveChangesAsync();
+        }
+        var coordinator = CreateCoordinator(runTimeoutMinutes: 5);
+
+        var runId = await coordinator.TriggerRunAsync(agent.Id, RunTrigger.Manual);
+        var run = await WaitForCompletion(runId!.Value, TimeSpan.FromSeconds(60));
+
+        Assert.NotNull(run);
+        Assert.NotEqual(RunStatus.TimedOut, run!.Status);
+        Assert.Contains(await ReadLog(runId.Value), line => line.Contains("Run limits: time=no limit, default budget=$2.5"));
     }
 
     [Fact]

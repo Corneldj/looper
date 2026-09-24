@@ -10,10 +10,12 @@ public sealed class SimulatedAgentExecutor : IAgentExecutor
 
     private static readonly Dictionary<string, Pricing> PriceTable = new(StringComparer.OrdinalIgnoreCase)
     {
+        ["claude-fable-5-1"] = new(10.00m, 50.00m),
         ["claude-fable-5"] = new(10.00m, 50.00m),
+        ["claude-opus-5-5"] = new(4.00m, 20.00m),
         ["claude-opus-5"] = new(5.00m, 25.00m),
         ["claude-opus-4-8"] = new(5.00m, 25.00m),
-        ["claude-sonnet-5"] = new(3.00m, 15.00m),
+        ["claude-sonnet-5"] = new(2.00m, 10.00m),
         ["claude-haiku-4-5"] = new(1.00m, 5.00m)
     };
 
@@ -43,7 +45,7 @@ public sealed class SimulatedAgentExecutor : IAgentExecutor
             + outputTokens * pricing.OutputPerMTok / 1_000_000m
             + cacheRead * pricing.InputPerMTok * 0.1m / 1_000_000m, 6);
 
-        if (agent.MaxBudgetUsd is { } budget and > 0 && cost > budget)
+        if ((agent.MaxBudgetUsd ?? context.DefaultMaxBudgetUsd) is { } budget and > 0 && cost > budget)
         {
             cost = budget;
             await log("warn", $"[dry run] Simulated cost clipped at the ${budget} run budget.");

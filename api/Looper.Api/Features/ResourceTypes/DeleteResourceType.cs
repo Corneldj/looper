@@ -34,9 +34,9 @@ public sealed class DeleteResourceTypeHandler(
         {
             File.Delete(Path.Combine(registry.ModulesDirectory, record.DllFileName));
         }
-        catch (IOException ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // The loaded assembly may hold the file on some platforms; it disappears on next cleanup.
+            // The loaded assembly may hold the file on some platforms (Windows reports it as access denied); it disappears on next cleanup.
             logger.LogWarning(ex, "Could not delete module DLL {Dll}; it will be ignored at next startup", record.DllFileName);
         }
 

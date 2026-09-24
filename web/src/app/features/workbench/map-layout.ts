@@ -61,7 +61,12 @@ export interface MapLayout {
 
 // Node dimensions are fixed by design: the canvas is a diagram, not a fluid grid.
 export const RES_W = 248;
+/** A resource node's header row — every resource has one, and its edges and port sit on it. */
 export const RES_H = 46;
+/** A one-off prompt's card: the header plus the prompt box and its status line. */
+export const PROMPT_NODE_H = 138;
+/** A Jira time-tracking card: the header plus the chosen issue and the search box. */
+export const JIRA_NODE_H = 112;
 export const AGENT_W = 344;
 export const AGENT_H = 154;
 export const DELIV_W = 224;
@@ -71,6 +76,18 @@ const AGENT_GAP = 22;
 const GROUP_HEADER = 30;
 const GROUP_GAP = 18;
 export const TOP_PAD = 34;
+
+/** Resources edited on their card are taller: the box or the chooser sits under the usual header row. */
+export function resourceNodeHeight(resource: MapResourceDto): number {
+  switch (resource.customTypeKey) {
+    case 'OneOffPrompt':
+      return PROMPT_NODE_H;
+    case 'JiraTimeTracking':
+      return JIRA_NODE_H;
+    default:
+      return RES_H;
+  }
+}
 
 /** A horizontal S-curve between two points — every edge on the canvas, drafted or committed. */
 export function bezierPath(x1: number, y1: number, x2: number, y2: number): string {
@@ -127,8 +144,9 @@ export function computeMapLayout(map: ArchitectureMapDto, width: number): MapLay
     groups.push({ label: group.key, icon: group.icon, y });
     y += GROUP_HEADER;
     for (const r of [...group.items].sort((a, b) => barycenter(a) - barycenter(b))) {
-      resources.push({ data: r, x: 0, y, w: RES_W, h: RES_H });
-      y += RES_H + NODE_GAP;
+      const h = resourceNodeHeight(r);
+      resources.push({ data: r, x: 0, y, w: RES_W, h });
+      y += h + NODE_GAP;
     }
     y += GROUP_GAP;
   }
@@ -164,6 +182,7 @@ export function computeMapLayout(map: ArchitectureMapDto, width: number): MapLay
     const incoming = pairs.filter(p => p.agentId === a.data.id).sort((p, q) => p.resource.y - q.resource.y);
     incoming.forEach((p, i) => endY.set(p, slot(a.y, AGENT_H, i, incoming.length, 22)));
   }
+  // Edges leave from the header row even on a tall card, so they line up with the port.
   for (const r of resources) {
     const outgoing = pairs.filter(p => p.resource === r).sort((p, q) => p.ay - q.ay);
     outgoing.forEach((p, i) => startY.set(p, slot(r.y, RES_H, i, outgoing.length, 12)));

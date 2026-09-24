@@ -37,6 +37,10 @@ export interface SettingsDto {
   hasApiKey: boolean;
   /** The last characters of the stored key, e.g. "…a1b2". */
   apiKeyHint: string | null;
+  /** Wall-clock cap per run in minutes, as it applies to the next run; 0 means no limit. */
+  runTimeoutMinutes: number;
+  /** USD cap for agents that set no budget of their own; null means no default. */
+  defaultMaxBudgetUsd: number | null;
   updatedAtUtc: string | null;
 }
 
@@ -46,6 +50,11 @@ export interface UpdateSettingsRequest {
   apiKey?: string | null;
   /** Removes the stored key. Refused while the mode still needs one. */
   clearApiKey?: boolean;
+  /** 0 = no limit. Omit to leave the stored value alone. */
+  runTimeoutMinutes?: number | null;
+  /** Omit to leave the stored value alone; use clearDefaultMaxBudget to remove it. */
+  defaultMaxBudgetUsd?: number | null;
+  clearDefaultMaxBudget?: boolean;
 }
 
 // ---------- Workflow packages: .workflow files exchanged between Looper instances ----------
@@ -107,7 +116,7 @@ export interface ResourceDto {
 
 // ---------- Dynamic resource types ----------
 
-export type ResourceFieldKind = 'Text' | 'Multiline' | 'Number' | 'Boolean' | 'Password' | 'Select' | 'Path';
+export type ResourceFieldKind = 'Text' | 'Multiline' | 'Number' | 'Boolean' | 'Password' | 'Select' | 'Path' | 'File';
 
 export interface ResourceFieldDto {
   key: string;
@@ -133,6 +142,35 @@ export interface GeneratedResourceTypeDto {
   type: ResourceTypeDto;
   sourceCode: string;
   costUsd: number;
+}
+
+// ---------- Boards: Azure DevOps tickets and Jira time tracking ----------
+
+/** A ticket as the board picker lists it; `listed` is false for a selected ticket the board's filters no longer match. */
+export interface TicketSummaryDto {
+  id: number;
+  title: string;
+  type: string;
+  state: string;
+  assignedTo: string;
+  tags: string[];
+  url: string;
+  changedAtUtc: string | null;
+  listed: boolean;
+}
+
+export interface JiraIssueDto {
+  key: string;
+  summary: string;
+}
+
+/**
+ * What the board lookups send: the form as it stands plus the saved resource, so its stored token
+ * can be used — or, from a canvas card, just the resource (configJson null: search as stored).
+ */
+export interface BoardLookupRequest {
+  resourceId: string | null;
+  configJson: string | null;
 }
 
 export type GenerationPhase = 'Generating' | 'Compiling' | 'Repairing' | 'Installing' | 'Installed' | 'Failed' | 'Cancelled';
@@ -290,6 +328,13 @@ export interface QuickLinkDto {
   path: string;
 }
 
+export interface FileEntryDto {
+  name: string;
+  path: string;
+  isHidden: boolean;
+  sizeBytes: number;
+}
+
 export interface DirectoryListingDto {
   path: string;
   parentPath: string | null;
@@ -297,6 +342,8 @@ export interface DirectoryListingDto {
   error: string | null;
   directories: DirectoryEntryDto[];
   quickLinks: QuickLinkDto[];
+  /** Only filled when the listing was requested with files (the file picker). */
+  files: FileEntryDto[];
 }
 
 export interface AgentSummaryDto {
@@ -514,7 +561,9 @@ export const RESOURCE_TYPES: { type: ResourceType; label: string; icon: string; 
 
 export const MODELS: { id: string; label: string; note: string }[] = [
   { id: 'claude-opus-5', label: 'Claude Opus 5', note: 'Default — strongest general model' },
-  { id: 'claude-fable-5', label: 'Claude Fable 5', note: 'Most capable, premium pricing' },
+  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', note: 'Newest Opus — cheaper than Opus 5' },
+  { id: 'claude-fable-5-1', label: 'Claude Fable 5.1', note: 'Most capable, premium pricing' },
+  { id: 'claude-fable-5', label: 'Claude Fable 5', note: 'Previous Fable generation' },
   { id: 'claude-opus-4-8', label: 'Claude Opus 4.8', note: 'Previous Opus generation' },
   { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', note: 'Fast and economical' },
   { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', note: 'Cheapest, simple tasks' },
@@ -637,7 +686,28 @@ export interface MapResourceDto {
   typeLabel: string;
   description: string;
   agentIds: string[];
+  /** For resources edited on their canvas card (one-off prompt, Jira time tracking); null otherwise. */
+  card: MapCardDto | null;
 }
+
+/** What a resource's canvas card edits in place, as the server has it now (re-served with every poll). */
+export interface MapCardDto {
+  /** A one-off prompt's waiting text; empty once a run has taken it. */
+  text: string | null;
+  issueKey: string | null;
+  issueSummary: string | null;
+  /** A Jira resource has its address and token, so the card can search. */
+  connected: boolean;
+}
+
+/**
+ * Config keys a resource's canvas card owns, by type. The edit modal neither shows nor sends them;
+ * the API keeps the stored values when a save leaves them out.
+ */
+export const CARD_FIELD_KEYS: Record<string, string[]> = {
+  OneOffPrompt: ['text'],
+  JiraTimeTracking: ['issueKey', 'issueSummary'],
+};
 
 /** An agent as the workbench canvas draws it: identity, trigger, schedule state, 24h activity, wiring. */
 /** A metric attached to an agent with its 30-day reading (total / average / gauge) — the canvas outcome line. */

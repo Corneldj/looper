@@ -86,6 +86,38 @@
       }
     </section>
 
+    @if (current()) {
+      <section class="settings-section">
+        <h3>Run limits</h3>
+        <p class="section-blurb">
+          Read the moment a run takes an execution slot — no restart. Every run logs the limits it
+          started under. An agent’s own budget cap always wins over the default.
+        </p>
+
+        <div class="limits-row">
+          <div class="field">
+            <label for="run-timeout">Time limit per run (minutes)</label>
+            <input id="run-timeout" class="input num" type="number" min="0" [max]="maxTimeoutMinutes" step="1"
+                   [class.invalid]="!limitsValid() && runTimeoutMinutes() != null"
+                   [ngModel]="runTimeoutMinutes()" (ngModelChange)="runTimeoutMinutes.set($event)" />
+            <span class="hint">
+              0 means no limit. A run past the limit is killed and recorded as timed out — with no cost
+              or turn count, because the CLI never gets to report.
+            </span>
+          </div>
+          <div class="field">
+            <label for="default-budget">Default budget per run (USD)</label>
+            <input id="default-budget" class="input num" type="number" min="0" step="0.5" placeholder="none"
+                   [ngModel]="defaultMaxBudgetUsd()" (ngModelChange)="defaultMaxBudgetUsd.set($event)" />
+            <span class="hint">
+              Handed to the CLI as its budget cap for agents that set none of their own, so a runaway
+              run stops with a clear reason instead of hitting the clock. Leave empty for no default.
+            </span>
+          </div>
+        </div>
+      </section>
+    }
+
     @if (error(); as message) {
       <p class="save-error">{{ message }}</p>
     }

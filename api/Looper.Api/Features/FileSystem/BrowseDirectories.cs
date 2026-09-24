@@ -5,6 +5,8 @@ namespace Looper.Api.Features.FileSystem;
 
 public sealed record DirectoryEntryDto(string Name, string Path, bool IsHidden);
 
+public sealed record FileEntryDto(string Name, string Path, bool IsHidden, long SizeBytes);
+
 public sealed record QuickLinkDto(string Label, string Path);
 
 public sealed record DirectoryListingDto(
@@ -13,14 +15,17 @@ public sealed record DirectoryListingDto(
     bool Exists,
     string? Error,
     IReadOnlyList<DirectoryEntryDto> Directories,
-    IReadOnlyList<QuickLinkDto> QuickLinks);
+    IReadOnlyList<QuickLinkDto> QuickLinks,
+    /// <summary>Files in the folder — only when asked for (the file picker); empty for the folder picker.</summary>
+    IReadOnlyList<FileEntryDto> Files);
 
 /// <summary>
-/// Lists sub-directories so the UI can offer a real folder picker. Directory names only —
-/// no file contents — and the API is bound to localhost, the same trust boundary as the
-/// agents it hands these folders to.
+/// Lists sub-directories so the UI can offer a real folder picker — and, when asked, the files too,
+/// so the same browser can pick a single file. Names and sizes only, never contents; the API is
+/// bound to localhost, the same trust boundary as the agents it hands these paths to. A path that
+/// names a file lists that file's folder, so a typed file path lands where the picker can select it.
 /// </summary>
-public sealed record BrowseDirectoriesQuery(string? Path) : IQuery<DirectoryListingDto>;
+public sealed record BrowseDirectoriesQuery(string? Path, bool IncludeFiles = false) : IQuery<DirectoryListingDto>;
 
 public sealed class BrowseDirectoriesHandler : IQueryHandler<BrowseDirectoriesQuery, DirectoryListingDto>
 {
@@ -30,11 +35,15 @@ public sealed class BrowseDirectoriesHandler : IQueryHandler<BrowseDirectoriesQu
         var quickLinks = BuildQuickLinks(home);
 
         var path = Resolve(query.Path, home);
+        if (query.IncludeFiles && File.Exists(path))
+        {
+            path = Path.GetDirectoryName(path) ?? path;
+        }
 
         if (!Directory.Exists(path))
         {
             return Task.FromResult(new DirectoryListingDto(
-                path, Parent(path), Exists: false, Error: null, [], quickLinks));
+                path, Parent(path), Exists: false, Error: null, [], quickLinks, []));
         }
 
         try
@@ -44,13 +53,20 @@ public sealed class BrowseDirectoriesHandler : IQueryHandler<BrowseDirectoriesQu
                 .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
+            var files = query.IncludeFiles
+                ? Directory.EnumerateFiles(path)
+                    .Select(file => new FileEntryDto(Path.GetFileName(file), file, Path.GetFileName(file).StartsWith('.'), SizeOf(file)))
+                    .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : [];
+
             return Task.FromResult(new DirectoryListingDto(
-                path, Parent(path), Exists: true, Error: null, directories, quickLinks));
+                path, Parent(path), Exists: true, Error: null, directories, quickLinks, files));
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
         {
             return Task.FromResult(new DirectoryListingDto(
-                path, Parent(path), Exists: true, Error: "This folder can’t be opened: " + ex.Message, [], quickLinks));
+                path, Parent(path), Exists: true, Error: "This folder can’t be opened: " + ex.Message, [], quickLinks, []));
         }
     }
 
@@ -71,6 +87,13 @@ public sealed class BrowseDirectoriesHandler : IQueryHandler<BrowseDirectoriesQu
         {
             return home;
         }
+    }
+
+    /// <summary>A file that vanishes between enumeration and stat must not fail the whole listing.</summary>
+    private static long SizeOf(string file)
+    {
+        try { return new FileInfo(file).Length; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return 0; }
     }
 
     private static string? Parent(string path) => Directory.GetParent(path)?.FullName;
@@ -98,6 +121,6 @@ public sealed class BrowseDirectoriesHandler : IQueryHandler<BrowseDirectoriesQu
 public sealed class BrowseDirectoriesEndpoint : IEndpoint
 {
     public void Map(IEndpointRouteBuilder app) =>
-        app.MapGet("/api/filesystem/directories", (string? path, IDispatcher dispatcher, CancellationToken ct) =>
-            dispatcher.Query(new BrowseDirectoriesQuery(path), ct));
+        app.MapGet("/api/filesystem/directories", (string? path, bool? includeFiles, IDispatcher dispatcher, CancellationToken ct) =>
+            dispatcher.Query(new BrowseDirectoriesQuery(path, includeFiles ?? false), ct));
 }

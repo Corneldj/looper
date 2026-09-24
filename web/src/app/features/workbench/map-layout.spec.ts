@@ -1,5 +1,7 @@
 import { ArchitectureMapDto, MapAgentDto, MapResourceDto } from '../../core/models';
-import { AGENT_H, AGENT_W, DELIV_H, DELIV_W, RES_W, computeMapLayout, matchesTopic } from './map-layout';
+import {
+  AGENT_H, AGENT_W, DELIV_H, DELIV_W, JIRA_NODE_H, PROMPT_NODE_H, RES_H, RES_W, computeMapLayout, matchesTopic,
+} from './map-layout';
 
 export function resource(overrides: Partial<MapResourceDto> = {}): MapResourceDto {
   return {
@@ -11,6 +13,7 @@ export function resource(overrides: Partial<MapResourceDto> = {}): MapResourceDt
     typeLabel: 'Rule',
     description: '',
     agentIds: [],
+    card: null,
     ...overrides,
   };
 }
@@ -197,5 +200,29 @@ describe('computeMapLayout', () => {
     const used = layout.resources.find(n => n.data.id === 'used')!;
     const unused = layout.resources.find(n => n.data.id === 'unused')!;
     expect(unused.y).toBeGreaterThan(used.y);
+  });
+
+  it('gives card-edited resources their taller cards, stacks the rest below them, and keeps edges on the header row', () => {
+    const card = { text: '', issueKey: null, issueSummary: null, connected: true };
+    const layout = computeMapLayout(
+      mapDto({
+        agents: [agent({ id: 'a1' })],
+        resources: [
+          resource({ id: 'note', customTypeKey: 'OneOffPrompt', type: 'Custom', typeLabel: 'One-off prompt', agentIds: ['a1'], card }),
+          resource({ id: 'note-2', customTypeKey: 'OneOffPrompt', type: 'Custom', typeLabel: 'One-off prompt', agentIds: ['a1'], card }),
+          resource({ id: 'time', customTypeKey: 'JiraTimeTracking', type: 'Custom', typeLabel: 'Jira time tracking', agentIds: ['a1'], card }),
+          resource({ id: 'rule', agentIds: ['a1'] }),
+        ],
+      }),
+      WIDTH,
+    );
+
+    const node = (id: string) => layout.resources.find(n => n.data.id === id)!;
+    expect([node('note').h, node('time').h, node('rule').h]).toEqual([PROMPT_NODE_H, JIRA_NODE_H, RES_H]);
+    expect(node('note-2').y).toBe(node('note').y + PROMPT_NODE_H + 12);          // the next card starts below the tall one
+
+    const edge = layout.edges.find(e => e.resourceId === 'note')!;
+    const startY = parseFloat(edge.path.split(/[\s,]+/)[2]);
+    expect(startY).toBe(node('note').y + RES_H / 2);                            // from the port, not the middle of the box
   });
 });

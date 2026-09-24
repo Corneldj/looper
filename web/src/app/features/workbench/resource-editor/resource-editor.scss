@@ -68,6 +68,17 @@
 /* Dynamic (Custom) type fields */
 .req { color: var(--red); }
 
+/* Types edited on their workbench card say so where the card's fields would have been. */
+.card-note {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
 .custom-switch-row {
   display: flex;
   align-items: center;

@@ -40,7 +40,9 @@ public sealed class ScriptAssistant(IOptions<LooperOptions> options, ClaudeAuthP
             startInfo.ArgumentList.Add("--output-format");
             startInfo.ArgumentList.Add("json");
             startInfo.ArgumentList.Add("--model");
-            startInfo.ArgumentList.Add("claude-opus-5");
+            startInfo.ArgumentList.Add("claude-opus-5-5");
+            startInfo.ArgumentList.Add("--effort");
+            startInfo.ArgumentList.Add("high");
             startInfo.ArgumentList.Add("--max-turns");
             startInfo.ArgumentList.Add(allowRun ? "20" : "8");
             startInfo.ArgumentList.Add("--permission-mode");

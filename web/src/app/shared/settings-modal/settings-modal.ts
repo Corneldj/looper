@@ -1,12 +1,13 @@
 import { Component, OnInit, computed, inject, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
+import { apiErrorMessage } from '../../core/format';
 import { SettingsStore } from '../../core/stores';
 import { ClaudeAuthMode, SettingsDto, UpdateSettingsRequest } from '../../core/models';
 
 /**
- * App-wide settings. Today that is one decision: what the Claude Code CLI signs in with —
- * the subscription login on the API machine (default) or an API key stored in Looper.
+ * App-wide settings: what the Claude Code CLI signs in with — the subscription login on the API
+ * machine (default) or an API key stored in Looper — and the limits every run starts under.
  * The key is write-only: the server reports that one exists and its last characters, never the key.
  */
 @Component({
@@ -35,12 +36,26 @@ export class SettingsModal implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly version = signal<string | null>(null);
 
+  /** Mirrors RunLimits.MaxTimeoutMinutes on the API — the longest delay a timer accepts. */
+  protected readonly maxTimeoutMinutes = 71582;
+  /** Wall-clock cap per run in minutes; 0 means no limit. */
+  protected readonly runTimeoutMinutes = signal<number | null>(null);
+  /** Budget in USD for agents that set none of their own; empty means no default. */
+  protected readonly defaultMaxBudgetUsd = signal<number | null>(null);
+
   protected readonly hasStoredKey = computed(() => (this.current()?.hasApiKey ?? false) && !this.removing());
   protected readonly showKeyInput = computed(() => this.mode() === 'ApiKey' && (!this.hasStoredKey() || this.replacing()));
 
+  protected readonly limitsValid = computed(() => {
+    const minutes = this.runTimeoutMinutes();
+    if (minutes == null || !Number.isFinite(minutes) || minutes < 0 || minutes > this.maxTimeoutMinutes) return false;
+    const budget = this.defaultMaxBudgetUsd();
+    return budget == null || (Number.isFinite(budget) && budget > 0);
+  });
+
   /** API-key mode needs a key to use: the stored one (kept) or a new one typed in. */
   protected readonly canSave = computed(() => {
-    if (this.saving() || !this.current()) return false;
+    if (this.saving() || !this.current() || !this.limitsValid()) return false;
     if (this.mode() !== 'ApiKey') return true;
     return this.apiKey().trim().length > 0 || (this.hasStoredKey() && !this.replacing()) || (this.hasStoredKey() && this.replacing() && this.apiKey().trim().length === 0);
   });
@@ -51,6 +66,8 @@ export class SettingsModal implements OnInit {
       next: settings => {
         this.current.set(settings);
         this.mode.set(settings.claudeAuthMode);
+        this.runTimeoutMinutes.set(settings.runTimeoutMinutes);
+        this.defaultMaxBudgetUsd.set(settings.defaultMaxBudgetUsd);
         this.store.apply(settings);
       },
       error: () => this.loadError.set('Settings could not be loaded — is the API running?'),
@@ -87,10 +104,15 @@ export class SettingsModal implements OnInit {
   protected save(): void {
     if (!this.canSave()) return;
     const typed = this.apiKey().trim();
+    const budget = this.defaultMaxBudgetUsd();
     const body: UpdateSettingsRequest = {
       claudeAuthMode: this.mode(),
       apiKey: typed.length > 0 ? typed : null,
       clearApiKey: this.removing(),
+      runTimeoutMinutes: Math.round(this.runTimeoutMinutes() ?? 0),
+      defaultMaxBudgetUsd: budget != null && budget > 0 ? budget : null,
+      // To the API, null means "leave it alone" — emptying a stored budget has to be said explicitly.
+      clearDefaultMaxBudget: budget == null && this.current()?.defaultMaxBudgetUsd != null,
     };
     this.saving.set(true);
     this.error.set(null);
@@ -102,10 +124,7 @@ export class SettingsModal implements OnInit {
       },
       error: err => {
         this.saving.set(false);
-        const detail = err?.error?.errors
-          ? Object.values(err.error.errors as Record<string, string[]>).flat().join('\n')
-          : err?.error?.title || err?.error?.detail;
-        this.error.set(detail || 'Saving settings failed — is the API running?');
+        this.error.set(apiErrorMessage(err, 'Saving settings failed — is the API running?'));
       },
     });
   }

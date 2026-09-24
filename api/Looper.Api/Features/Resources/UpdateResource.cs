@@ -47,7 +47,8 @@ public sealed class UpdateResourceHandler(LooperDbContext db, Looper.Api.Modules
         var entity = resource.Resource;
         entity.Name = command.Name.Trim();
         entity.Description = command.Description.Trim();
-        entity.ConfigJson = SecretMasker.PreserveSecrets(entity, command.ConfigJson, registry);
+        // Masked secrets keep their stored value, and so do the keys a canvas card owns when the form leaves them out.
+        entity.ConfigJson = Boards.CardFields.KeepOmitted(entity, SecretMasker.PreserveSecrets(entity, command.ConfigJson, registry));
         entity.UpdatedAtUtc = DateTime.UtcNow;
 
         // Re-scaffold in case the storage path changed (idempotent for graph modules).

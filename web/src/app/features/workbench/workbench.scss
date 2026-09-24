@@ -258,11 +258,25 @@
 /* ---- resource ---- */
 
 .node.resource {
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 8px;
   padding-right: 22px;
   cursor: default;
+
+  /* The header row every resource has; a card (prompt box, issue chooser) sits below it. 28px = 46 − padding − border. */
+  .res-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 28px;
+    flex: none;
+    min-width: 0;
+  }
+
+  /* A card being edited floats above its neighbours, so its dropdown covers the nodes below. */
+  &.has-card:focus-within { z-index: 10; }
 
   .res-icon { font-size: 16px; flex: none; }
   .res-name {
@@ -285,7 +299,7 @@
   .res-actions {
     position: absolute;
     right: 22px;
-    top: 50%;
+    top: 23px; /* the header row's middle (RES_H / 2), on plain and tall cards alike */
     transform: translateY(-50%);
     display: flex;
     gap: 0;
@@ -304,7 +318,7 @@
 .port {
   position: absolute;
   right: -8px;
-  top: 50%;
+  top: 23px; /* the header row's middle (RES_H / 2): edges leave from here, also on a tall card */
   width: 16px;
   height: 16px;
   margin-top: -8px;

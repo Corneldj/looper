@@ -18,4 +18,10 @@ public static class AppSettingKeys
 
     /// <summary>The Anthropic API key used when the mode is ApiKey. Never returned by the API.</summary>
     public const string ClaudeApiKey = "claude.apiKey";
+
+    /// <summary>Wall-clock limit per run in minutes; "0" means no limit. Absent: Looper:RunTimeoutMinutes from appsettings.</summary>
+    public const string RunTimeoutMinutes = "run.timeoutMinutes";
+
+    /// <summary>USD cap applied to runs whose agent sets no budget of its own. Absent: no default cap.</summary>
+    public const string DefaultMaxBudgetUsd = "run.defaultMaxBudgetUsd";
 }

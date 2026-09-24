@@ -11,7 +11,11 @@ public sealed record AgentExecutionContext(
     /// <summary>For event-triggered runs: the triggering events (topic + payload), verbatim.</summary>
     string? TriggerEvents = null,
     /// <summary>Output of before-run Script resources, already formatted as a prompt section.</summary>
-    string? ScriptOutputs = null);
+    string? ScriptOutputs = null,
+    /// <summary>Settings' default run budget; applies only when the agent sets no MaxBudgetUsd of its own.</summary>
+    decimal? DefaultMaxBudgetUsd = null,
+    /// <summary>Board resources' prompt sections, gathered by the harness before the run: the selected tickets, one-off prompts.</summary>
+    IReadOnlyList<string>? Briefing = null);
 
 public sealed record AgentExecutionOutcome(
     bool Success,

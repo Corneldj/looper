@@ -1,0 +1,38 @@
+/* Sits under the node's header row; the canvas disables text selection, the box needs it back. */
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-right: -8px;
+  user-select: text;
+}
+
+.prompt-box {
+  height: 64px;
+  resize: none;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text);
+
+  &:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--surface);
+  }
+}
+
+.prompt-status {
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  &.waiting { color: var(--accent-strong); font-weight: 600; }
+  &.error { color: var(--red); }
+}

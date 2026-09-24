@@ -1,11 +1,15 @@
 import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../../core/api.service';
+import { apiErrorMessage } from '../../../core/format';
 import { AgentsStore, ResourcesStore, WorkflowsStore } from '../../../core/stores';
 import { FolderPicker } from '../../../shared/folder-picker/folder-picker';
 import { ScriptEditor } from './script-editor';
+import { TicketPicker } from './ticket-picker';
+import { JiraSettings } from './jira-settings';
 import { EventPicker } from '../../../shared/event-picker/event-picker';
 import {
+  CARD_FIELD_KEYS,
   MODELS,
   ResourceDto,
   ResourceFieldDto,
@@ -24,7 +28,7 @@ type McpTransport = 'stdio' | 'http' | 'sse';
 @Component({
   selector: 'app-resource-editor',
   host: { '(document:keydown.escape)': 'onEscape()' },
-  imports: [FormsModule, FolderPicker, ScriptEditor, EventPicker],
+  imports: [FormsModule, FolderPicker, ScriptEditor, TicketPicker, JiraSettings, EventPicker],
   templateUrl: './resource-editor.html',
   styleUrl: './resource-editor.scss',
 })
@@ -45,6 +49,20 @@ export class ResourceEditor implements OnInit {
 
   /** Scripts get a code editor with run + Claude-assist panels instead of the generic field list. */
   readonly isScriptType = computed(() => this.typeDef()?.typeKey === 'Script');
+
+  /** Azure DevOps tickets get the board to tick tickets on; Jira time tracking gets its connection and booking form. */
+  readonly isTicketsType = computed(() => this.typeDef()?.typeKey === 'AzureDevOpsTickets');
+  readonly isJiraType = computed(() => this.typeDef()?.typeKey === 'JiraTimeTracking');
+  readonly isOneOffPromptType = computed(() => this.typeDef()?.typeKey === 'OneOffPrompt');
+
+  /**
+   * Keys the resource's workbench card owns (the one-off prompt's text, the Jira issue). The form
+   * neither shows nor sends them; the API keeps what is stored, so saving here never undoes the card.
+   */
+  private readonly cardKeys = computed(() => CARD_FIELD_KEYS[this.typeDef()?.typeKey ?? ''] ?? []);
+
+  /** The fields the form edits: every field of the type except the card's own. */
+  readonly formFields = computed(() => this.customFields().filter(f => !this.cardKeys().includes(f.key)));
 
   /** Event raisers pick their topic from the catalog (exact topics only — raising takes no wildcards). */
   readonly isEventType = computed(() => this.typeDef()?.typeKey === 'EventRaiser');
@@ -87,10 +105,18 @@ export class ResourceEditor implements OnInit {
     return typeof value === 'string' ? value : '';
   }
 
-  /** Which dynamic Path-kind field the folder picker is currently choosing for. */
+  /** Which dynamic Path- or File-kind field the browser is currently choosing for. */
   readonly customPathFieldKey = signal<string | null>(null);
+  /** Path fields browse folders; File fields browse files. */
+  readonly customPickerMode = signal<'folder' | 'file'>('folder');
 
   openCustomFolderPicker(fieldKey: string): void {
+    this.customPickerMode.set('folder');
+    this.customPathFieldKey.set(fieldKey);
+  }
+
+  openCustomFilePicker(fieldKey: string): void {
+    this.customPickerMode.set('file');
     this.customPathFieldKey.set(fieldKey);
   }
 
@@ -256,7 +282,7 @@ export class ResourceEditor implements OnInit {
           (this.poolProvisioning() === 'blank' || !!this.poolSource().trim())
         );
       case 'Custom':
-        return this.customFields().every(field => {
+        return this.formFields().every(field => {
           if (!field.required) return true;
           const value = this.customValues()[field.key];
           if (field.kind === 'Boolean') return true;
@@ -311,9 +337,10 @@ export class ResourceEditor implements OnInit {
         });
     request.subscribe({
       next: dto => this.closed.emit(dto),
-      error: () => {
+      error: err => {
         this.saving.set(false);
-        this.saveError.set('Save failed — check that the API is running and try again.');
+        // A rejected save says why (a mistyped ticket id, a malformed Jira key); only a silent API is "not running".
+        this.saveError.set(apiErrorMessage(err, 'Save failed — check that the API is running and try again.'));
       },
     });
   }
@@ -515,7 +542,7 @@ export class ResourceEditor implements OnInit {
       }
       case 'Custom': {
         const config: Record<string, unknown> = {};
-        for (const field of this.customFields()) {
+        for (const field of this.formFields()) {
           const value = this.customValues()[field.key];
           if (field.kind === 'Boolean') {
             config[field.key] = value === true;

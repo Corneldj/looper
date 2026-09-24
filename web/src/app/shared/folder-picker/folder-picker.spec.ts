@@ -5,7 +5,7 @@ import { API_BASE } from '../../core/api.service';
 import { DirectoryListingDto } from '../../core/models';
 import { FolderPicker } from './folder-picker';
 
-function listing(path: string, names: string[] = []): DirectoryListingDto {
+function listing(path: string, names: string[] = [], files: string[] = []): DirectoryListingDto {
   return {
     path,
     parentPath: '/home',
@@ -13,6 +13,7 @@ function listing(path: string, names: string[] = []): DirectoryListingDto {
     error: null,
     directories: names.map(name => ({ name, path: `${path}/${name}`, isHidden: name.startsWith('.') })),
     quickLinks: [{ label: 'Home', path: '/home/dev' }],
+    files: files.map(name => ({ name, path: `${path}/${name}`, isHidden: name.startsWith('.'), sizeBytes: 12 })),
   };
 }
 
@@ -29,9 +30,10 @@ describe('FolderPicker', () => {
 
   afterEach(() => http.verify());
 
-  function create(start: string | null = null) {
+  function create(start: string | null = null, mode: 'folder' | 'file' = 'folder') {
     const fixture = TestBed.createComponent(FolderPicker);
     fixture.componentRef.setInput('startPath', start);
+    fixture.componentRef.setInput('mode', mode);
     fixture.detectChanges();
     return fixture;
   }
@@ -50,6 +52,7 @@ describe('FolderPicker', () => {
     create('/srv/code');
     const request = http.expectOne(r => r.url === `${API_BASE}/filesystem/directories`);
     expect(request.request.params.get('path')).toBe('/srv/code');
+    expect(request.request.params.has('includeFiles')).withContext('folder mode asks for folders only').toBeFalse();
     request.flush(listing('/srv/code'));
   });
 
@@ -90,6 +93,45 @@ describe('FolderPicker', () => {
     picker.cancel();
 
     expect(emitted).toEqual(['/home/dev/projects', null]);
+  });
+
+  it('in file mode asks for files, preselects a typed file path, and emits the chosen file', () => {
+    const fixture = create('/home/dev/brief.md', 'file');
+    const request = http.expectOne(r => r.url === `${API_BASE}/filesystem/directories`);
+    expect(request.request.params.get('includeFiles')).toBe('true');
+    expect(request.request.params.get('path')).toBe('/home/dev/brief.md');
+    request.flush(listing('/home/dev', ['projects'], ['brief.md', '.env', 'notes.txt']));
+    const picker = fixture.componentInstance;
+
+    expect(picker.visibleFiles().map(f => f.name)).toEqual(['brief.md', 'notes.txt']); // dot-files hide like dot-folders
+    expect(picker.hiddenCount()).toBe(1);
+    expect(picker.selectedFile()).withContext('the API listed the file’s folder; the file stays selected').toBe('/home/dev/brief.md');
+    expect(picker.canChoose()).toBeTrue();
+
+    const emitted: (string | null)[] = [];
+    picker.picked.subscribe(value => emitted.push(value));
+    picker.selectFile({ name: 'notes.txt', path: '/home/dev/notes.txt', isHidden: false, sizeBytes: 12 });
+    expect(picker.pathInput()).toBe('/home/dev/notes.txt');
+    picker.choose();
+
+    expect(emitted).toEqual(['/home/dev/notes.txt']);
+  });
+
+  it('in file mode nothing can be chosen until a file is selected', () => {
+    const fixture = create('/home/dev', 'file');
+    http.expectOne(r => r.url === `${API_BASE}/filesystem/directories`).flush(listing('/home/dev', ['projects'], ['a.md']));
+    const picker = fixture.componentInstance;
+
+    expect(picker.selectedFile()).toBeNull();
+    expect(picker.canChoose()).toBeFalse();
+
+    const emitted: (string | null)[] = [];
+    picker.picked.subscribe(value => emitted.push(value));
+    picker.choose();
+    expect(emitted).withContext('choose with nothing selected is a no-op').toEqual([]);
+
+    picker.chooseFile({ name: 'a.md', path: '/home/dev/a.md', isHidden: false, sizeBytes: 3 });
+    expect(emitted).toEqual(['/home/dev/a.md']);
   });
 
   it('reports a non-fatal error when the API is unreachable', () => {

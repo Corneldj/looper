@@ -1,0 +1,65 @@
+<div class="field">
+  <label>{{ field('baseUrl')?.label ?? 'Jira address' }}<span class="req"> *</span></label>
+  <input
+    class="input"
+    [placeholder]="field('baseUrl')?.placeholder ?? ''"
+    [ngModel]="str('baseUrl')"
+    (ngModelChange)="set('baseUrl', $event)"
+  />
+  <span class="hint">{{ field('baseUrl')?.hint }}</span>
+</div>
+
+<div class="field">
+  <label>{{ field('pat')?.label ?? 'Personal access token' }}<span class="req"> *</span></label>
+  <input
+    class="input"
+    type="password"
+    autocomplete="new-password"
+    [ngModel]="str('pat')"
+    (ngModelChange)="set('pat', $event)"
+  />
+  <span class="hint">{{ str('pat') === secretSentinel ? 'Leave unchanged to keep the stored token.' : field('pat')?.hint }}</span>
+</div>
+
+<div class="issue-note">
+  @if (issueKey()) {
+    ⏱ Time goes against <span class="mono">{{ issueKey() }}</span>
+    @if (issueSummary()) {
+      — {{ issueSummary() }}
+    }
+    <span class="issue-where">Pick another on the resource's card on the workbench.</span>
+  } @else if (saved()) {
+    No issue picked yet. <span class="issue-where">Pick it on the resource's card on the workbench — it searches Jira.</span>
+  } @else {
+    <span class="issue-where">Once it is created, pick the issue on the resource's card on the workbench — it searches Jira.</span>
+  }
+</div>
+
+<div class="form-row">
+  <div class="field">
+    <label>{{ field('booking')?.label ?? 'Book time in Tempo' }}</label>
+    <!-- Empty means the first option (after every run), so an untouched form shows it too. -->
+    <select
+      class="select"
+      [ngModel]="str('booking') || (field('booking')?.options?.[0] ?? '')"
+      (ngModelChange)="set('booking', $event)"
+    >
+      @for (option of field('booking')?.options ?? []; track option) {
+        <option [value]="option">{{ option }}</option>
+      }
+    </select>
+  </div>
+  <div class="field">
+    <label>{{ field('activity')?.label ?? 'Activity' }}</label>
+    <select
+      class="select"
+      [ngModel]="str('activity') || (field('activity')?.options?.[0] ?? '')"
+      (ngModelChange)="set('activity', $event)"
+    >
+      @for (option of field('activity')?.options ?? []; track option) {
+        <option [value]="option">{{ option }}</option>
+      }
+    </select>
+  </div>
+</div>
+<span class="hint row-hint">{{ field('booking')?.hint }}</span>

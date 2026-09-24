@@ -300,6 +300,7 @@ public sealed class GraphMaintenanceServiceTests : IDisposable
             new MetricRecorder(new Factory(_options), NullLogger<MetricRecorder>.Instance),
             new ReviewRunner(looperOptions, new ClaudeAuthProvider(new Factory(_options)), NullLogger<ReviewRunner>.Instance),
             dispatcher,
+            new Looper.Api.Infrastructure.Boards.BoardHarness(new Factory(_options), new StubHttpClientFactory(), NullLogger<Looper.Api.Infrastructure.Boards.BoardHarness>.Instance),
             looperOptions,
             NullLogger<AgentRunCoordinator>.Instance);
         return new GraphMaintenanceService(new Factory(_options), registry, dispatcher, coordinator,
